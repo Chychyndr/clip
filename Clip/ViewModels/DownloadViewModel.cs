@@ -96,7 +96,7 @@ public sealed class DownloadViewModel : ObservableObject
 
             if (ActiveCount > 0)
             {
-                return $"{ActiveCount} active, {QueuedCount} queued";
+                return QueuedCount > 0 ? $"Downloading, {QueuedCount} queued" : "Downloading";
             }
 
             return QueuedCount > 0 ? $"{QueuedCount} queued" : "Ready";
@@ -150,6 +150,8 @@ public sealed class DownloadViewModel : ObservableObject
     {
         try
         {
+            await AnalyzeQueuedItemAsync(item, cancellationToken);
+
             item.Status = DownloadStatus.Downloading;
             item.StatusText = "Starting yt-dlp";
             var progress = new Progress<DownloadProgress>(update =>
@@ -223,6 +225,21 @@ public sealed class DownloadViewModel : ObservableObject
             RaiseQueueState();
             StartNextQueued();
         }
+    }
+
+    private async Task AnalyzeQueuedItemAsync(DownloadItem item, CancellationToken cancellationToken)
+    {
+        if (item.Metadata is not null)
+        {
+            return;
+        }
+
+        item.Status = DownloadStatus.Analyzing;
+        item.StatusText = "Analyzing URL";
+        var metadata = await _ytDlpService.AnalyzeAsync(item.Url, cancellationToken);
+        item.Metadata = metadata;
+        item.Title = metadata.DisplayTitle;
+        item.Platform = URLDetector.DetectPlatform(metadata.WebpageUrl ?? item.Url);
     }
 
     private void Cancel(DownloadItem? item)

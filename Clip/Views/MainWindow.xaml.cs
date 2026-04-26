@@ -13,10 +13,9 @@ public sealed partial class MainWindow : Window
         ViewModel = viewModel;
         Root.DataContext = ViewModel;
         ClipTheme.ApplyMica(this);
-        NativeWindowService.Resize(this, 1120, 760);
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
-        NativeWindowService.GetAppWindow(this).Closing += OnAppWindowClosing;
+        NativeWindowService.Resize(this, 1360, 900);
+        var appWindow = NativeWindowService.GetAppWindow(this);
+        appWindow.Closing += OnAppWindowClosing;
     }
 
     public MainViewModel ViewModel { get; }

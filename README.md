@@ -1,147 +1,170 @@
 # Clip
 
 <p align="center">
-  <strong>Нативное Windows-приложение для скачивания видео, аудио и коротких клипов.</strong><br>
-  WinUI 3 оболочка вокруг <code>yt-dlp</code>, <code>ffmpeg</code> и <code>ffprobe</code>.
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0078D4?style=flat-square&logo=windows">
+  <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet">
+  <img alt="WinUI 3" src="https://img.shields.io/badge/WinUI-3-2B7FFF?style=flat-square">
+  <img alt="yt-dlp" src="https://img.shields.io/badge/yt--dlp-bundled-23B894?style=flat-square">
 </p>
 
-<p align="center">
-  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%2022H2%2B%20%7C%2011-0078D4?style=flat-square&logo=windows">
-  <img alt=".NET" src="https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet">
-  <img alt="WinUI" src="https://img.shields.io/badge/WinUI-3-5C2D91?style=flat-square">
-</p>
+Clip - Windows-приложение для скачивания видео и аудио по ссылке. Внутри используются `yt-dlp`, `ffmpeg` и `ffprobe`.
 
-## О проекте
+## Что умеет
 
-Clip помогает сохранять медиа по ссылке в аккуратном Windows-приложении. Он показывает превью, позволяет выбрать формат и качество, поддерживает обрезку по времени, ведет очередь загрузок и хранит локальную историю.
+| Возможность | Как работает |
+| --- | --- |
+| Одна ссылка | Вставьте ссылку, нажмите `Analyze`, затем `Download`. |
+| TXT со ссылками | Нажмите `TXT` и выберите файл со ссылками. |
+| Drag and drop | Перетащите ссылку или `.txt` файл в окно приложения. |
+| Буфер обмена | Автоматически подхватываются только ссылки на поддерживаемые видеосервисы. |
+| Очередь | Загрузки идут последовательно, по одной. |
+| Форматы | `MP4`, `MOV`, `WebM`, `MP3`. |
+| Качество | `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`, `Original`. |
+| Обрезка | Можно указать начало и конец фрагмента. |
+| История | Готовые загрузки сохраняются в локальной истории. |
 
-Интерфейс сделан в стиле Windows 11: Mica-фон, полупрозрачные карточки, компактная компоновка, понятные состояния и быстрые действия из трея.
+## Сервисы
 
-## Возможности
+Clip распознает эти платформы:
 
-- Вставка ссылки, drag and drop и отслеживание буфера обмена.
-- Превью с обложкой, названием, платформой, автором и длительностью.
-- Форматы: `MP4`, `MOV`, `WebM`, `MP3`.
-- Выбор качества: `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`.
-- Обрезка фрагмента по началу и концу.
-- Очередь загрузок до 3 активных задач.
-- Отмена, повтор, открытие файла и открытие папки.
-- История загрузок в локальном JSON-файле.
-- Иконка в системном трее с быстрыми командами.
-- Встроенные `yt-dlp`, `ffmpeg` и `ffprobe`.
-- Разбор Reddit-ссылок через `api.reddit.com`.
-- Автопоиск cookies для Instagram в установленных браузерах.
+| Сервис | Нюансы |
+| --- | --- |
+| YouTube / YouTube Shorts | Публичные ссылки идут без cookies. Если YouTube просит вход, Clip пробует cookies из браузера. |
+| X / Twitter | Доступность зависит от ограничений самого X. |
+| Instagram | Для части ссылок нужен вход в браузере. |
+| TikTok | Публичные ссылки обычно работают через `yt-dlp`. |
+| Reddit | Ссылки разбираются через `api.reddit.com`. |
 
-## Стек
+Ссылки на другие сайты игнорируются при автопроверке буфера обмена, импорте TXT и drag and drop.
 
-- C# 12
-- .NET 8
-- WinUI 3
-- Windows App SDK
-- Unpackaged desktop build
+## Трей
 
-## Что нужно для сборки
+Если включено скрытие в трей, кнопка закрытия Windows прячет окно. Через иконку в трее можно развернуть Clip, скрыть окно, поставить очередь на паузу, открыть настройки или полностью выключить приложение.
 
-Для сборки на Windows 11 установите:
+## TXT импорт
 
-- Visual Studio 2022
-- Workload `.NET desktop development`
-- инструменты Windows App SDK / WinUI
-- .NET 8 SDK
-
-Также положите исполняемые файлы в папку:
+Файл может содержать ссылки в любом из таких вариантов:
 
 ```text
-Clip/
-  Resources/
-    bin/
-      yt-dlp.exe
-      ffmpeg.exe
-      ffprobe.exe
+https://youtu.be/example1
+https://youtu.be/example2 https://www.tiktok.com/@user/video/123
+https://x.com/user/status/123; https://www.instagram.com/reel/example/
+https://youtu.be/example3: https://reddit.com/r/videos/comments/example
 ```
 
-Где взять бинарники:
+Повторяющиеся ссылки добавляются один раз.
 
-- `yt-dlp.exe`: https://github.com/yt-dlp/yt-dlp/releases
-- `ffmpeg.exe` и `ffprobe.exe`: https://www.gyan.dev/ffmpeg/builds/
+## Сборка
 
-## Запуск из исходников
+Положите бинарники сюда:
 
-Откройте PowerShell в корне репозитория:
+```text
+Clip\Resources\bin\yt-dlp.exe
+Clip\Resources\bin\ffmpeg.exe
+Clip\Resources\bin\ffprobe.exe
+```
+
+Команды:
 
 ```powershell
 dotnet restore
 dotnet build .\Clip.sln -c Debug -p:Platform=x64
+```
+
+Запуск из исходников:
+
+```powershell
 dotnet run --project .\Clip\Clip.csproj
 ```
 
-Через Visual Studio:
+## Готовый EXE
 
-1. Откройте `Clip.sln`.
-2. Выберите платформу `x64`.
-3. Назначьте `Clip` стартовым проектом.
-4. Нажмите `F5`.
-
-## Как собрать приложение
-
-В репозитории есть готовый скрипт публикации:
+Portable-сборка:
 
 ```powershell
 .\scripts\publish-unpackaged.ps1
 ```
 
-После выполнения появится папка:
-
-```text
-artifacts/
-  Clip-win-x64/
-    Clip.exe
-    Clip.dll
-    Resources/
-      bin/
-        yt-dlp.exe
-        ffmpeg.exe
-        ffprobe.exe
-```
-
-Готовый файл для запуска:
+Результат:
 
 ```text
 artifacts\Clip-win-x64\Clip.exe
 ```
 
-Запускайте `Clip.exe` на Windows 11 из папки `Clip-win-x64`. Вся папка должна оставаться целиком, потому что приложение использует файлы из `Resources\bin`.
+Папку `Clip-win-x64` нужно переносить целиком.
 
-## Как собрать один файл для скачивания
-
-Для публикации удобнее собрать установщик:
+Установщик одним файлом:
 
 ```powershell
 .\scripts\build-installer.ps1
 ```
 
-Готовый файл:
+Результат:
 
 ```text
 artifacts\ClipSetup.exe
 ```
 
-Это один `.exe`, который можно выложить в GitHub Releases. При запуске он установит Clip в:
+Установщик кладет приложение в:
 
 ```text
 %LOCALAPPDATA%\Programs\Clip
 ```
 
-После установки появится ярлык в меню Start, а приложение запустится автоматически.
+## Подпись сертификатом
 
-## Где хранятся данные
+Для публичного релиза нужен code-signing certificate от доверенного центра сертификации. Самоподписанный сертификат подходит для локальной проверки.
+
+Создать тестовый сертификат:
+
+```powershell
+mkdir certs
+$cert = New-SelfSignedCertificate `
+  -Type CodeSigningCert `
+  -Subject "CN=Clip Dev" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -HashAlgorithm SHA256
+
+$password = Read-Host "PFX password" -AsSecureString
+Export-PfxCertificate `
+  -Cert $cert `
+  -FilePath .\certs\clip-dev.pfx `
+  -Password $password
+```
+
+Собрать и подписать `Clip.exe` внутри установщика и сам `ClipSetup.exe`:
+
+```powershell
+$password = Read-Host "PFX password" -AsSecureString
+.\scripts\build-installer.ps1 `
+  -CertificatePath .\certs\clip-dev.pfx `
+  -CertificatePassword $password
+```
+
+Проверить подпись:
+
+```powershell
+signtool verify /pa /v .\artifacts\ClipSetup.exe
+```
+
+`signtool.exe` входит в Windows SDK и доступен из Visual Studio Developer PowerShell. Сертификаты, `.pfx` файлы и пароли храните вне git.
+
+## Частые ошибки
+
+| Ошибка | Решение |
+| --- | --- |
+| `Missing required binary` | Проверьте `yt-dlp.exe`, `ffmpeg.exe`, `ffprobe.exe` в `Clip\Resources\bin`. |
+| `Sign in to confirm you're not a bot` | Войдите в YouTube в Chrome, Edge, Firefox или Brave и повторите загрузку. Clip подключает cookies только после такой ошибки. |
+| `Could not copy Chrome cookie database` | Закройте Chrome и повторите попытку. Если есть Edge, Firefox или Brave, Clip попробует их тоже. |
+| `Clip could not locate the output file` | Обновите `yt-dlp.exe`, проверьте папку загрузки и права записи. |
+| SmartScreen предупреждает при запуске | Подпишите релиз доверенным code-signing certificate. |
+| Drag and drop не сработал | Перетаскивайте сам текст ссылки, ссылку из адресной строки или `.txt` файл в окно Clip. |
+
+## Данные
 
 ```text
 Загрузки:  %USERPROFILE%\Downloads\Clip
-Настройки: %LOCALAPPDATA%\Clip\settings.json
 История:   %LOCALAPPDATA%\Clip\history.json
+Настройки: %LOCALAPPDATA%\Clip\settings.json
+Лог:       %LOCALAPPDATA%\Clip\crash.log
 ```
-
-## Публичный релиз
-
-Для публикации рекомендуется подписать приложение сертификатом. Без подписи Windows Defender SmartScreen может показать предупреждение при первом запуске.

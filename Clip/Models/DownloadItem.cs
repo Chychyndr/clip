@@ -18,11 +18,11 @@ public sealed class DownloadItem : ObservableEntity
     private string _saveDirectory = ClipConstants.DefaultDownloadDirectory;
     private string? _outputFilePath;
     private string? _errorMessage;
+    private VideoMetadata? _metadata;
 
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.Now;
     public DateTimeOffset? CompletedAt { get; set; }
-    public VideoMetadata? Metadata { get; init; }
     public ClipRange ClipRange { get; init; } = new();
 
     [JsonIgnore]
@@ -44,6 +44,12 @@ public sealed class DownloadItem : ObservableEntity
     {
         get => _platform;
         set => SetProperty(ref _platform, value);
+    }
+
+    public VideoMetadata? Metadata
+    {
+        get => _metadata;
+        set => SetProperty(ref _metadata, value);
     }
 
     public DownloadStatus Status

@@ -10,6 +10,7 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <ApplicationIcon>Assets\Clip.ico</ApplicationIcon>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -24,6 +25,8 @@
     <Content Include="Resources\bin\yt-dlp.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\yt-dlp.exe')" />
     <Content Include="Resources\bin\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\ffmpeg.exe')" />
     <Content Include="Resources\bin\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\ffprobe.exe')" />
+    <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Clip.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

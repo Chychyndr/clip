@@ -56,7 +56,7 @@ public sealed class ClipboardMonitor : IDisposable
                 text = await content.GetTextAsync();
             }
 
-            if (!URLDetector.TryExtractFirstUrl(text, out var url) ||
+            if (!URLDetector.TryExtractFirstSupportedUrl(text, out var url) ||
                 string.Equals(url, _lastUrl, StringComparison.OrdinalIgnoreCase))
             {
                 return;

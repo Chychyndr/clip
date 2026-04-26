@@ -5,24 +5,73 @@ namespace Clip.Services;
 
 public static partial class URLDetector
 {
+    private static readonly char[] UrlEndDelimiters = [' ', '\t', '\r', '\n', ';', '<', '>', '"'];
+    private static readonly char[] UrlTrimStart = ['(', '[', '{', '"', '\''];
+    private static readonly char[] UrlTrimEnd = ['.', ',', ';', ':', ')', ']', '}', '"', '\'', '!', '?'];
+
     public static bool TryExtractFirstUrl(string? text, out string url)
     {
         url = "";
+        var urls = ExtractUrls(text);
+        if (urls.Count == 0)
+        {
+            return false;
+        }
+
+        url = urls[0];
+        return true;
+    }
+
+    public static bool TryExtractFirstSupportedUrl(string? text, out string url)
+    {
+        url = "";
+        var urls = ExtractSupportedUrls(text);
+        if (urls.Count == 0)
+        {
+            return false;
+        }
+
+        url = urls[0];
+        return true;
+    }
+
+    public static IReadOnlyList<string> ExtractUrls(string? text)
+    {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return false;
+            return [];
         }
 
-        var match = UrlRegex().Match(text);
-        if (!match.Success)
+        var matches = UrlStartRegex().Matches(text);
+        if (matches.Count == 0)
         {
-            return false;
+            return [];
         }
 
-        url = match.Value.Trim().TrimEnd('.', ',', ')', ']');
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+        var urls = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var start = matches[index].Index;
+            var end = index + 1 < matches.Count ? matches[index + 1].Index : text.Length;
+            var candidate = CleanUrlCandidate(text[start..end]);
+            if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !seen.Add(candidate))
+            {
+                continue;
+            }
+
+            urls.Add(candidate);
+        }
+
+        return urls;
     }
+
+    public static IReadOnlyList<string> ExtractSupportedUrls(string? text) =>
+        ExtractUrls(text)
+            .Where(IsSupportedVideoUrl)
+            .ToList();
 
     public static Platform DetectPlatform(string? url)
     {
@@ -32,27 +81,27 @@ public static partial class URLDetector
         }
 
         var host = uri.Host.ToLowerInvariant();
-        if (host.Contains("youtube.com") || host.Contains("youtu.be"))
+        if (IsHost(host, "youtube.com") || IsHost(host, "youtu.be"))
         {
             return Platform.YouTube;
         }
 
-        if (host.Contains("twitter.com") || host == "x.com" || host.EndsWith(".x.com"))
+        if (IsHost(host, "twitter.com") || IsHost(host, "x.com"))
         {
             return Platform.Twitter;
         }
 
-        if (host.Contains("instagram.com"))
+        if (IsHost(host, "instagram.com"))
         {
             return Platform.Instagram;
         }
 
-        if (host.Contains("tiktok.com"))
+        if (IsHost(host, "tiktok.com"))
         {
             return Platform.TikTok;
         }
 
-        if (host.Contains("reddit.com") || host.Contains("redd.it"))
+        if (IsHost(host, "reddit.com") || IsHost(host, "redd.it"))
         {
             return Platform.Reddit;
         }
@@ -60,8 +109,27 @@ public static partial class URLDetector
         return Platform.Unknown;
     }
 
-    public static bool IsSupportedUrl(string? text) => TryExtractFirstUrl(text, out _);
+    public static bool IsSupportedUrl(string? text) => TryExtractFirstSupportedUrl(text, out _);
 
-    [GeneratedRegex(@"https?://[^\s<>""]+", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex UrlRegex();
+    public static bool IsSupportedVideoUrl(string? url) =>
+        DetectPlatform(url) is not Platform.Unknown;
+
+    private static string CleanUrlCandidate(string text)
+    {
+        var candidate = text.Trim();
+        var delimiter = candidate.IndexOfAny(UrlEndDelimiters);
+        if (delimiter >= 0)
+        {
+            candidate = candidate[..delimiter];
+        }
+
+        return candidate.Trim().TrimStart(UrlTrimStart).TrimEnd(UrlTrimEnd);
+    }
+
+    private static bool IsHost(string host, string domain) =>
+        host.Equals(domain, StringComparison.OrdinalIgnoreCase) ||
+        host.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
+
+    [GeneratedRegex(@"https?://", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
+    private static partial Regex UrlStartRegex();
 }

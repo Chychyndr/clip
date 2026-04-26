@@ -7,10 +7,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Clip\Assets\Clip.ico</ApplicationIcon>
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\clip-payload.zip" LogicalName="clip-payload.zip" />
+    <EmbeddedResource Include="Resources\clip-payload.zip" LogicalName="clip-payload.zip" Condition="Exists('Resources\clip-payload.zip')" />
   </ItemGroup>
 </Project>

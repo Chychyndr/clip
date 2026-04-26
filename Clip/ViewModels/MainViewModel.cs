@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
 using Clip.Models;
 using Clip.Services;
 
@@ -44,6 +45,7 @@ public sealed class MainViewModel : ObservableObject
 
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeCurrentUrlAsync, () => !IsAnalyzing);
         PasteCommand = new AsyncRelayCommand(PasteFromClipboardAsync);
+        ImportLinksCommand = new AsyncRelayCommand(ImportLinksFromTextFileAsync, () => !IsAnalyzing);
         QueueDownloadCommand = new AsyncRelayCommand(QueueCurrentDownloadAsync, () => !IsAnalyzing);
         ChooseFolderCommand = new AsyncRelayCommand(ChooseFolderAsync);
         ClearCommand = new RelayCommand(Clear);
@@ -60,6 +62,7 @@ public sealed class MainViewModel : ObservableObject
 
     public AsyncRelayCommand AnalyzeCommand { get; }
     public AsyncRelayCommand PasteCommand { get; }
+    public AsyncRelayCommand ImportLinksCommand { get; }
     public AsyncRelayCommand QueueDownloadCommand { get; }
     public AsyncRelayCommand ChooseFolderCommand { get; }
     public RelayCommand ClearCommand { get; }
@@ -78,7 +81,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
 
-            DetectedPlatform = URLDetector.TryExtractFirstUrl(value, out var url)
+            DetectedPlatform = URLDetector.TryExtractFirstSupportedUrl(value, out var url)
                 ? URLDetector.DetectPlatform(url)
                 : Platform.Unknown;
             OnPropertyChanged(nameof(CanAnalyze));
@@ -205,7 +208,7 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task AnalyzeCurrentUrlAsync()
     {
-        if (!URLDetector.TryExtractFirstUrl(UrlText, out var url))
+        if (!URLDetector.TryExtractFirstSupportedUrl(UrlText, out var url))
         {
             Feedback = "That does not look like a video URL.";
             return;
@@ -254,14 +257,14 @@ public sealed class MainViewModel : ObservableObject
                     ? await content.GetTextAsync()
                     : "";
 
-            if (URLDetector.TryExtractFirstUrl(text, out var url))
+            if (URLDetector.TryExtractFirstSupportedUrl(text, out var url))
             {
                 UrlText = url;
                 Feedback = "Link pasted.";
             }
             else
             {
-                Feedback = "Clipboard does not contain a supported URL.";
+                Feedback = "Clipboard does not contain a supported video URL.";
             }
         }
         catch (Exception ex)
@@ -272,7 +275,7 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task QueueCurrentDownloadAsync()
     {
-        if (!URLDetector.TryExtractFirstUrl(UrlText, out var url))
+        if (!URLDetector.TryExtractFirstSupportedUrl(UrlText, out var url))
         {
             Feedback = "Add a URL before queueing.";
             return;
@@ -287,25 +290,35 @@ public sealed class MainViewModel : ObservableObject
             }
         }
 
-        var item = new DownloadItem
-        {
-            Url = url,
-            Metadata = Metadata,
-            Title = Metadata.DisplayTitle,
-            Platform = DetectedPlatform,
-            Format = SelectedFormat,
-            Resolution = SelectedResolution,
-            UseCustomTargetSize = UseCustomTargetSize,
-            TargetSizeMegabytes = TargetSizeMegabytes,
-            SaveDirectory = SaveDirectory
-        };
-        item.ClipRange.IsEnabled = ClipRange.IsEnabled;
-        item.ClipRange.DurationSeconds = ClipRange.DurationSeconds;
-        item.ClipRange.StartSeconds = ClipRange.StartSeconds;
-        item.ClipRange.EndSeconds = ClipRange.EndSeconds;
+        var item = CreateDownloadItem(url, Metadata);
 
         await Downloads.EnqueueAsync(item);
         Feedback = "Added to downloads.";
+    }
+
+    public async Task ImportLinksFromTextFileAsync()
+    {
+        if (WindowHandle == IntPtr.Zero)
+        {
+            Feedback = "Window is not ready for file selection.";
+            return;
+        }
+
+        var path = await _fileDialogService.PickTextFileAsync(WindowHandle);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            var text = await File.ReadAllTextAsync(path, _shutdown.Token);
+            await QueueImportedUrlsAsync(URLDetector.ExtractSupportedUrls(text));
+        }
+        catch (Exception ex)
+        {
+            Feedback = ex.Message;
+        }
     }
 
     public async Task ChooseFolderAsync()
@@ -344,9 +357,59 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    public async Task AcceptDroppedDataAsync(DataPackageView dataView)
+    {
+        try
+        {
+            if (dataView.Contains(StandardDataFormats.StorageItems))
+            {
+                var storageItems = await dataView.GetStorageItemsAsync();
+                var urls = new List<string>();
+                foreach (var storageItem in storageItems.OfType<StorageFile>())
+                {
+                    if (!string.Equals(storageItem.FileType, ".txt", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var fileText = await FileIO.ReadTextAsync(storageItem);
+                    urls.AddRange(URLDetector.ExtractSupportedUrls(fileText));
+                }
+
+                await QueueImportedUrlsAsync(urls);
+                return;
+            }
+
+            var text = "";
+            if (dataView.Contains(StandardDataFormats.WebLink))
+            {
+                text = (await dataView.GetWebLinkAsync())?.ToString() ?? "";
+            }
+            else if (dataView.Contains(StandardDataFormats.Text))
+            {
+                text = await dataView.GetTextAsync();
+            }
+
+            var links = URLDetector.ExtractSupportedUrls(text);
+            if (links.Count == 1)
+            {
+                UrlText = links[0];
+                Feedback = "Link dropped.";
+                await AnalyzeCurrentUrlAsync();
+                return;
+            }
+
+            await QueueImportedUrlsAsync(links);
+        }
+        catch (Exception ex)
+        {
+            Feedback = ex.Message;
+        }
+    }
+
     public async Task HandleCommandLineAsync(string command)
     {
-        if (URLDetector.TryExtractFirstUrl(command, out var url))
+        if (URLDetector.TryExtractFirstSupportedUrl(command, out var url))
         {
             UrlText = url;
             await AnalyzeCurrentUrlAsync();
@@ -364,6 +427,48 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public void Dispose() => _shutdown.Cancel();
+
+    private async Task QueueImportedUrlsAsync(IEnumerable<string> urls)
+    {
+        var links = urls
+            .Where(url => Uri.TryCreate(url, UriKind.Absolute, out _) && URLDetector.IsSupportedVideoUrl(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (links.Count == 0)
+        {
+            Feedback = "No supported links found.";
+            return;
+        }
+
+        foreach (var link in links)
+        {
+            await Downloads.EnqueueAsync(CreateDownloadItem(link));
+        }
+
+        Feedback = links.Count == 1 ? "Queued 1 link." : $"Queued {links.Count} links.";
+    }
+
+    private DownloadItem CreateDownloadItem(string url, VideoMetadata? metadata = null)
+    {
+        var item = new DownloadItem
+        {
+            Url = url,
+            Metadata = metadata,
+            Title = metadata?.DisplayTitle ?? "Queued link",
+            Platform = metadata is null ? URLDetector.DetectPlatform(url) : DetectedPlatform,
+            Format = SelectedFormat,
+            Resolution = SelectedResolution,
+            UseCustomTargetSize = UseCustomTargetSize,
+            TargetSizeMegabytes = TargetSizeMegabytes,
+            SaveDirectory = SaveDirectory
+        };
+        item.ClipRange.IsEnabled = ClipRange.IsEnabled;
+        item.ClipRange.DurationSeconds = ClipRange.DurationSeconds;
+        item.ClipRange.StartSeconds = ClipRange.StartSeconds;
+        item.ClipRange.EndSeconds = ClipRange.EndSeconds;
+        return item;
+    }
 
     private void SetThumbnail(string? url)
     {

@@ -121,7 +121,7 @@ public partial class App : Application
             }
 
             await _viewModel.InitializeAsync();
-            if (URLDetector.TryExtractFirstUrl(launchCommand, out _))
+            if (URLDetector.TryExtractFirstSupportedUrl(launchCommand, out _))
             {
                 await _viewModel.HandleCommandLineAsync(launchCommand);
             }

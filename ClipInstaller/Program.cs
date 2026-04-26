@@ -23,7 +23,7 @@ internal static class Program
                 "Programs",
                 AppName);
 
-            KillRunningClip();
+            KillRunningClip(installDirectory);
             InstallPayload(installDirectory);
             CreateStartMenuShortcut(installDirectory);
             LaunchClip(installDirectory);
@@ -47,6 +47,8 @@ internal static class Program
 
     private static void InstallPayload(string installDirectory)
     {
+        EnsureSafeInstallDirectory(installDirectory);
+
         var tempDirectory = Path.Combine(Path.GetTempPath(), "ClipSetup-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
 
@@ -88,12 +90,33 @@ internal static class Program
         return stream;
     }
 
-    private static void KillRunningClip()
+    private static void EnsureSafeInstallDirectory(string installDirectory)
+    {
+        var programsDirectory = Path.GetFullPath(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs"));
+        var targetDirectory = Path.GetFullPath(installDirectory);
+        var relativeTarget = Path.GetRelativePath(programsDirectory, targetDirectory);
+
+        if (string.IsNullOrWhiteSpace(relativeTarget) ||
+            relativeTarget.StartsWith("..", StringComparison.Ordinal) ||
+            Path.IsPathRooted(relativeTarget))
+        {
+            throw new InvalidOperationException("Небезопасный путь установки.");
+        }
+    }
+
+    private static void KillRunningClip(string installDirectory)
     {
         foreach (var process in Process.GetProcessesByName("Clip"))
         {
             try
             {
+                if (!IsInstalledClipProcess(process, installDirectory))
+                {
+                    continue;
+                }
+
                 process.Kill(entireProcessTree: true);
                 process.WaitForExit(5000);
             }
@@ -101,6 +124,21 @@ internal static class Program
             {
                 // A locked previous instance will be handled by the install step.
             }
+        }
+    }
+
+    private static bool IsInstalledClipProcess(Process process, string installDirectory)
+    {
+        try
+        {
+            var expectedPath = Path.GetFullPath(Path.Combine(installDirectory, "Clip.exe"));
+            var actualPath = process.MainModule?.FileName;
+            return !string.IsNullOrWhiteSpace(actualPath) &&
+                   string.Equals(Path.GetFullPath(actualPath), expectedPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
         }
     }
 

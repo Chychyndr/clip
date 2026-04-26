@@ -14,23 +14,16 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Border Width="24" Height="24" CornerRadius="8" Background="{StaticResource ClipLavenderBrush}">
-                <FontIcon FontSize="13" Glyph="&#xE71B;" Foreground="White" />
-            </Border>
+            <Image Width="24"
+                   Height="24"
+                   Source="ms-appx:///Assets/Square44x44Logo.png" />
             <TextBlock Grid.Column="1"
                        Text="Clip"
                        VerticalAlignment="Center"
                        FontWeight="SemiBold"
                        FontSize="14" />
-            <Button Grid.Column="2"
-                    Style="{StaticResource IconButtonStyle}"
-                    Command="{Binding ClearCommand}"
-                    ToolTipService.ToolTip="Clear">
-                <SymbolIcon Symbol="Clear" />
-            </Button>
         </Grid>
 
         <views:ContentView Grid.Row="1" />

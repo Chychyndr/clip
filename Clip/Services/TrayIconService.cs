@@ -24,11 +24,15 @@ public sealed class TrayIconService : IDisposable
     private const int MfSeparator = 0x00000800;
     private const int TpmRightButton = 0x0002;
     private const int TpmReturnCommand = 0x0100;
+    private const int ImageIcon = 1;
+    private const int LrLoadFromFile = 0x00000010;
+    private const int LrDefaultSize = 0x00000040;
 
     private readonly MainWindow _window;
     private readonly MainViewModel _viewModel;
     private readonly IntPtr _windowHandle;
     private readonly IntPtr _iconHandle;
+    private readonly bool _ownsIconHandle;
     private readonly WindowProcedure _newWindowProcedure;
     private IntPtr _oldWindowProcedure;
     private bool _isDisposed;
@@ -38,7 +42,7 @@ public sealed class TrayIconService : IDisposable
         _window = window;
         _viewModel = viewModel;
         _windowHandle = NativeWindowService.GetWindowHandle(window);
-        _iconHandle = LoadIcon(IntPtr.Zero, new IntPtr(IdiApplication));
+        (_iconHandle, _ownsIconHandle) = LoadTrayIcon();
         _newWindowProcedure = WndProc;
         _oldWindowProcedure = SetWindowProcedure(_windowHandle, _newWindowProcedure);
 
@@ -104,13 +108,14 @@ public sealed class TrayIconService : IDisposable
 
         try
         {
-            AppendMenu(menu, MfString, 1, "Open Clip");
-            AppendMenu(menu, MfString, 2, "Paste URL");
-            AppendMenu(menu, MfString, 3, "Start Download");
-            AppendMenu(menu, MfString, 4, _viewModel.Downloads.IsPaused ? "Resume Queue" : "Pause Queue");
-            AppendMenu(menu, MfString, 5, "Settings");
+            AppendMenu(menu, MfString, 1, "Развернуть Clip");
+            AppendMenu(menu, MfString, 2, "Скрыть Clip");
+            AppendMenu(menu, MfString, 3, "Вставить ссылку");
+            AppendMenu(menu, MfString, 4, "Начать загрузку");
+            AppendMenu(menu, MfString, 5, _viewModel.Downloads.IsPaused ? "Продолжить очередь" : "Поставить очередь на паузу");
+            AppendMenu(menu, MfString, 6, "Настройки");
             AppendMenu(menu, MfSeparator, 0, null);
-            AppendMenu(menu, MfString, 6, "Quit");
+            AppendMenu(menu, MfString, 7, "Отключить Clip");
 
             GetCursorPos(out var point);
             SetForegroundWindow(_windowHandle);
@@ -131,21 +136,24 @@ public sealed class TrayIconService : IDisposable
                 ShowWindow();
                 break;
             case 2:
-                ShowWindow();
-                await _viewModel.PasteFromClipboardAsync();
+                NativeWindowService.Hide(_window);
                 break;
             case 3:
                 ShowWindow();
-                await _viewModel.QueueCurrentDownloadAsync();
+                await _viewModel.PasteFromClipboardAsync();
                 break;
             case 4:
-                _viewModel.Downloads.TogglePause();
+                ShowWindow();
+                await _viewModel.QueueCurrentDownloadAsync();
                 break;
             case 5:
+                _viewModel.Downloads.TogglePause();
+                break;
+            case 6:
                 _viewModel.ShowSettings = true;
                 ShowWindow();
                 break;
-            case 6:
+            case 7:
                 _window.AllowClose = true;
                 Dispose();
                 _window.Close();
@@ -183,6 +191,26 @@ public sealed class TrayIconService : IDisposable
             SetWindowProcedure(_windowHandle, _oldWindowProcedure);
             _oldWindowProcedure = IntPtr.Zero;
         }
+
+        if (_ownsIconHandle && _iconHandle != IntPtr.Zero)
+        {
+            DestroyIcon(_iconHandle);
+        }
+    }
+
+    private static (IntPtr Handle, bool ShouldDestroy) LoadTrayIcon()
+    {
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Clip.ico");
+        if (File.Exists(iconPath))
+        {
+            var handle = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 0, 0, LrLoadFromFile | LrDefaultSize);
+            if (handle != IntPtr.Zero)
+            {
+                return (handle, true);
+            }
+        }
+
+        return (LoadIcon(IntPtr.Zero, new IntPtr(IdiApplication)), false);
     }
 
     private static IntPtr SetWindowProcedure(IntPtr windowHandle, WindowProcedure procedure)
@@ -243,6 +271,13 @@ public sealed class TrayIconService : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr LoadIcon(IntPtr instance, IntPtr iconName);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr LoadImage(IntPtr instance, string name, int type, int width, int height, int load);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr icon);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr newLong);

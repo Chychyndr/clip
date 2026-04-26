@@ -5,7 +5,7 @@ public static class ClipConstants
     public const string AppName = "Clip";
     public const string SingleInstanceName = "Local\\Clip.SingleInstance";
     public const string IpcPipeName = "Clip.SecondInstancePipe";
-    public const int MaxConcurrentDownloads = 3;
+    public const int MaxConcurrentDownloads = 1;
 
     public static string AppBaseDirectory => AppContext.BaseDirectory;
     public static string BinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin");
