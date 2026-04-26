@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.log
+Clip/Resources/bin/*.exe
+!Clip/Resources/bin/.gitkeep
+Clip/Resources/bin/*.dll

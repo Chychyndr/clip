@@ -1,0 +1,86 @@
+<UserControl
+    x:Class="Clip.Views.HistoryView"
+    x:Name="Root"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox PlaceholderText="Search history"
+                     Text="{Binding HistorySearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     CornerRadius="12" />
+            <Button Grid.Column="1"
+                    Style="{StaticResource IconButtonStyle}"
+                    Command="{Binding ClearHistoryCommand}"
+                    ToolTipService.ToolTip="Clear history">
+                <SymbolIcon Symbol="Clear" />
+            </Button>
+        </Grid>
+
+        <ListView Grid.Row="1"
+                  ItemsSource="{Binding FilteredHistory}"
+                  SelectionMode="None"
+                  Padding="0"
+                  BorderThickness="0">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource CompactGlassCardBorderStyle}" Margin="0,0,0,8">
+                        <Grid RowSpacing="8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding FilePath}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Platform}"
+                                           Foreground="{StaticResource ClipLavenderBrush}" />
+                            </Grid>
+
+                            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
+                                <Button Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding DataContext.RedownloadCommand, ElementName=Root}"
+                                        CommandParameter="{Binding}"
+                                        ToolTipService.ToolTip="Download again">
+                                    <SymbolIcon Symbol="Download" />
+                                </Button>
+                                <Button Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding DataContext.OpenFileCommand, ElementName=Root}"
+                                        CommandParameter="{Binding}"
+                                        ToolTipService.ToolTip="Open file">
+                                    <SymbolIcon Symbol="OpenFile" />
+                                </Button>
+                                <Button Style="{StaticResource IconButtonStyle}"
+                                        Command="{Binding DataContext.OpenFolderCommand, ElementName=Root}"
+                                        CommandParameter="{Binding}"
+                                        ToolTipService.ToolTip="Open folder">
+                                    <SymbolIcon Symbol="Folder" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</UserControl>

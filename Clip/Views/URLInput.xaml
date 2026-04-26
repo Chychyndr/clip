@@ -1,0 +1,57 @@
+<UserControl
+    x:Class="Clip.Views.URLInput"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    AllowDrop="True"
+    DragOver="OnDragOver"
+    Drop="OnDrop">
+    <Border Style="{StaticResource GlassCardBorderStyle}">
+        <Grid RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="URL" FontWeight="SemiBold" />
+
+            <Grid Grid.Row="1" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBox Text="{Binding UrlText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         PlaceholderText="Paste a video link or drop one here"
+                         MinHeight="42"
+                         CornerRadius="12" />
+
+                <Button Grid.Column="1"
+                        Style="{StaticResource IconButtonStyle}"
+                        Command="{Binding PasteCommand}"
+                        ToolTipService.ToolTip="Paste">
+                    <SymbolIcon Symbol="Paste" />
+                </Button>
+
+                <Button Grid.Column="2"
+                        Style="{StaticResource PillButtonStyle}"
+                        Command="{Binding AnalyzeCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <SymbolIcon Symbol="Find" />
+                        <TextBlock Text="Analyze" />
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="3"
+                        Style="{StaticResource PillButtonStyle}"
+                        Command="{Binding QueueDownloadCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <SymbolIcon Symbol="Download" />
+                        <TextBlock Text="Download" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

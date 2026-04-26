@@ -1,0 +1,28 @@
+<UserControl
+    x:Class="Clip.Views.StatusBarView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CompactGlassCardBorderStyle}" Padding="12,8">
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Text="{Binding Feedback}"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding Downloads.QueueSummary}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="2"
+                    Style="{StaticResource IconButtonStyle}"
+                    Command="{Binding ToggleSettingsCommand}"
+                    ToolTipService.ToolTip="Settings">
+                <SymbolIcon Symbol="Setting" />
+            </Button>
+        </Grid>
+    </Border>
+</UserControl>

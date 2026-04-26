@@ -1,0 +1,48 @@
+<UserControl
+    x:Class="Clip.Views.VideoPreview"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource GlassCardBorderStyle}">
+        <Grid>
+            <Grid Visibility="{Binding Metadata, Converter={StaticResource InverseNullToVisibilityConverter}}">
+                <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="16">
+                    <FontIcon Glyph="&#xE8B2;" FontSize="30" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="Preview appears after analysis"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Grid>
+
+            <Grid ColumnSpacing="14" Visibility="{Binding Metadata, Converter={StaticResource NullToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="190" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border CornerRadius="12" Background="{ThemeResource ControlFillColorDefaultBrush}">
+                    <Image Source="{Binding ThumbnailImage}"
+                           Stretch="UniformToFill"
+                           Height="112" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Spacing="8">
+                    <TextBlock Text="{Binding Metadata.DisplayTitle}"
+                               FontSize="18"
+                               FontWeight="SemiBold"
+                               TextWrapping="WrapWholeWords"
+                               MaxLines="2" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border CornerRadius="10" Padding="10,4" Background="{StaticResource ClipLavenderBrush}">
+                            <TextBlock Text="{Binding DetectedPlatform}" Foreground="White" FontSize="12" />
+                        </Border>
+                        <TextBlock Text="{Binding Metadata.DurationLabel}"
+                                   VerticalAlignment="Center"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Metadata.Author}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

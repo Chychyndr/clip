@@ -1,0 +1,60 @@
+<UserControl
+    x:Class="Clip.Views.ClipRangeView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource GlassCardBorderStyle}"
+            Visibility="{Binding ClipRange.IsEnabled, Converter={StaticResource BoolToVisibilityConverter}}">
+        <Grid RowSpacing="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <TextBlock Text="Clip range" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding ClipRange.EndLabel}"
+                           HorizontalAlignment="Right"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Grid>
+
+            <Grid Grid.Row="1" RowSpacing="6">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Slider Header="{Binding ClipRange.StartLabel}"
+                        Value="{Binding ClipRange.StartSeconds, Mode=TwoWay}"
+                        Minimum="0"
+                        Maximum="{Binding ClipRange.DurationSeconds}" />
+                <Slider Grid.Row="1"
+                        Header="{Binding ClipRange.EndLabel}"
+                        Value="{Binding ClipRange.EndSeconds, Mode=TwoWay}"
+                        Minimum="0"
+                        Maximum="{Binding ClipRange.DurationSeconds}" />
+            </Grid>
+
+            <Grid Grid.Row="2" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <NumberBox Header="Start seconds"
+                           Value="{Binding ClipRange.StartSeconds, Mode=TwoWay}"
+                           Minimum="0"
+                           Maximum="{Binding ClipRange.DurationSeconds}"
+                           SmallChange="1"
+                           LargeChange="10"
+                           SpinButtonPlacementMode="Inline" />
+                <NumberBox Grid.Column="1"
+                           Header="End seconds"
+                           Value="{Binding ClipRange.EndSeconds, Mode=TwoWay}"
+                           Minimum="0"
+                           Maximum="{Binding ClipRange.DurationSeconds}"
+                           SmallChange="1"
+                           LargeChange="10"
+                           SpinButtonPlacementMode="Inline" />
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

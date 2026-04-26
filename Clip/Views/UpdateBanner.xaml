@@ -1,0 +1,28 @@
+<UserControl
+    x:Class="Clip.Views.UpdateBanner"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource CompactGlassCardBorderStyle}"
+            Padding="12,8"
+            Visibility="{Binding HasUpdateMessage, Converter={StaticResource BoolToVisibilityConverter}}">
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <FontIcon Glyph="&#xE946;" Foreground="{StaticResource ClipBronzeBrush}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding UpdateMessage}"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="2"
+                    Style="{StaticResource IconButtonStyle}"
+                    Command="{Binding DismissUpdateCommand}"
+                    ToolTipService.ToolTip="Dismiss">
+                <SymbolIcon Symbol="Cancel" />
+            </Button>
+        </Grid>
+    </Border>
+</UserControl>

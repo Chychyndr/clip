@@ -1,0 +1,58 @@
+<UserControl
+    x:Class="Clip.Views.FormatPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border Style="{StaticResource GlassCardBorderStyle}">
+        <Grid RowSpacing="14">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <RadioButtons Header="Format"
+                              ItemsSource="{Binding Formats}"
+                              SelectedItem="{Binding SelectedFormat, Mode=TwoWay}"
+                              MaxColumns="4" />
+                <RadioButtons Grid.Column="1"
+                              Header="Resolution"
+                              ItemsSource="{Binding Resolutions}"
+                              SelectedItem="{Binding SelectedResolution, Mode=TwoWay}"
+                              MaxColumns="4" />
+            </Grid>
+
+            <Grid Grid.Row="1" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <ToggleSwitch Header="Target size"
+                              OffContent="Original"
+                              OnContent="Custom MB"
+                              IsOn="{Binding UseCustomTargetSize, Mode=TwoWay}" />
+                <NumberBox Grid.Column="1"
+                           Header="MB"
+                           Value="{Binding TargetSizeMegabytes, Mode=TwoWay}"
+                           Minimum="1"
+                           Maximum="20480"
+                           SmallChange="5"
+                           LargeChange="50"
+                           SpinButtonPlacementMode="Inline"
+                           IsEnabled="{Binding UseCustomTargetSize}" />
+            </Grid>
+
+            <ToggleSwitch Grid.Row="2"
+                          Header="Clip"
+                          OffContent="Full media"
+                          OnContent="Trim range"
+                          IsOn="{Binding ClipRange.IsEnabled, Mode=TwoWay}" />
+        </Grid>
+    </Border>
+</UserControl>
