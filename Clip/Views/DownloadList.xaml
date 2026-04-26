@@ -52,27 +52,23 @@
                                        Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.CancelCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnCancelClicked"
                                         ToolTipService.ToolTip="Cancel">
                                     <SymbolIcon Symbol="Cancel" />
                                 </Button>
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.RetryCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnRetryClicked"
                                         Visibility="{Binding CanRetry, Converter={StaticResource BoolToVisibilityConverter}}"
                                         ToolTipService.ToolTip="Retry">
                                     <SymbolIcon Symbol="Refresh" />
                                 </Button>
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.OpenFileCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnOpenFileClicked"
                                         ToolTipService.ToolTip="Open file">
                                     <SymbolIcon Symbol="OpenFile" />
                                 </Button>
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.OpenFolderCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnOpenFolderClicked"
                                         ToolTipService.ToolTip="Open folder">
                                     <SymbolIcon Symbol="Folder" />
                                 </Button>

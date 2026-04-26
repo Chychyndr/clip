@@ -59,20 +59,17 @@
 
                             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.RedownloadCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnRedownloadClicked"
                                         ToolTipService.ToolTip="Download again">
                                     <SymbolIcon Symbol="Download" />
                                 </Button>
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.OpenFileCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnOpenFileClicked"
                                         ToolTipService.ToolTip="Open file">
                                     <SymbolIcon Symbol="OpenFile" />
                                 </Button>
                                 <Button Style="{StaticResource IconButtonStyle}"
-                                        Command="{Binding DataContext.OpenFolderCommand, ElementName=Root}"
-                                        CommandParameter="{Binding}"
+                                        Click="OnOpenFolderClicked"
                                         ToolTipService.ToolTip="Open folder">
                                     <SymbolIcon Symbol="Folder" />
                                 </Button>

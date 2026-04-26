@@ -237,7 +237,7 @@ public sealed class TrayIconService : IDisposable
         public int Y;
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShellNotifyIcon(int message, ref NotifyIconData data);
 

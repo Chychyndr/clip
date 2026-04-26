@@ -17,90 +17,121 @@ public partial class App : Application
 
     public App()
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+        {
+            if (eventArgs.ExceptionObject is Exception exception)
+            {
+                CrashLog.Error(exception, "AppDomain unhandled exception");
+            }
+        };
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            CrashLog.Error(eventArgs.Exception, "Unobserved task exception");
+            eventArgs.SetObserved();
+        };
+        UnhandledException += (_, eventArgs) =>
+        {
+            CrashLog.Error(eventArgs.Exception, "WinUI unhandled exception");
+        };
+
         InitializeComponent();
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        ClipConstants.EnsureAppDirectories();
-        _singleInstanceService = new SingleInstanceService(ClipConstants.SingleInstanceName, ClipConstants.IpcPipeName);
-
-        var launchCommand = string.Join(" ", Environment.GetCommandLineArgs().Skip(1));
-        if (!_singleInstanceService.TryClaim())
+        try
         {
-            var command = string.IsNullOrWhiteSpace(launchCommand) ? "clip:show" : launchCommand;
-            await SingleInstanceService.SendToExistingInstanceAsync(ClipConstants.IpcPipeName, command);
-            Exit();
-            return;
-        }
+            CrashLog.Info("Launch started");
+            ClipConstants.EnsureAppDirectories();
+            _singleInstanceService = new SingleInstanceService(ClipConstants.SingleInstanceName, ClipConstants.IpcPipeName);
 
-        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        var processRunner = new ProcessRunner();
-        var redditResolver = new RedditResolver();
-        var ytDlpService = new YTDLPService(processRunner, redditResolver);
-        var ffmpegService = new FFmpegService(processRunner);
-        var updateService = new UpdateService(processRunner);
-        var fileDialogService = new FileDialogService();
-        var outputPathHolder = new OutputPathHolder();
-        var settings = SettingsViewModel.Load();
-        var history = DownloadHistory.Load(ClipConstants.HistoryPath);
-        var downloads = new DownloadViewModel(ytDlpService, ffmpegService, history, dispatcherQueue);
-
-        _viewModel = new MainViewModel(
-            ytDlpService,
-            fileDialogService,
-            outputPathHolder,
-            updateService,
-            downloads,
-            settings);
-
-        _window = new MainWindow(_viewModel);
-        _viewModel.WindowHandle = NativeWindowService.GetWindowHandle(_window);
-        _window.Closed += (_, _) => DisposeServices();
-
-        _trayIconService = new TrayIconService(_window, _viewModel);
-        downloads.PropertyChanged += (_, eventArgs) =>
-        {
-            if (eventArgs.PropertyName == nameof(DownloadViewModel.IsBusy))
+            var launchCommand = string.Join(" ", Environment.GetCommandLineArgs().Skip(1));
+            if (!_singleInstanceService.TryClaim())
             {
-                _trayIconService.SetBusy(downloads.IsBusy);
+                var command = string.IsNullOrWhiteSpace(launchCommand) ? "clip:show" : launchCommand;
+                await SingleInstanceService.SendToExistingInstanceAsync(ClipConstants.IpcPipeName, command);
+                Exit();
+                return;
             }
-        };
 
-        _clipboardMonitor = new ClipboardMonitor(dispatcherQueue)
-        {
-            IsEnabled = settings.MonitorClipboard
-        };
-        _clipboardMonitor.SupportedUrlDetected += (_, url) =>
-            dispatcherQueue.TryEnqueue(async () => await _viewModel.AcceptDetectedClipboardUrlAsync(url));
-        settings.PropertyChanged += (_, eventArgs) =>
-        {
-            if (eventArgs.PropertyName == nameof(SettingsViewModel.MonitorClipboard) && _clipboardMonitor is not null)
-            {
-                _clipboardMonitor.IsEnabled = settings.MonitorClipboard;
-            }
-        };
+            var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+            var processRunner = new ProcessRunner();
+            var redditResolver = new RedditResolver();
+            var ytDlpService = new YTDLPService(processRunner, redditResolver);
+            var ffmpegService = new FFmpegService(processRunner);
+            var updateService = new UpdateService(processRunner);
+            var fileDialogService = new FileDialogService();
+            var outputPathHolder = new OutputPathHolder();
+            var settings = SettingsViewModel.Load();
+            var history = DownloadHistory.Load(ClipConstants.HistoryPath);
+            var downloads = new DownloadViewModel(ytDlpService, ffmpegService, history, dispatcherQueue);
 
-        _singleInstanceService.StartListening(command =>
-            dispatcherQueue.TryEnqueue(async () =>
+            _viewModel = new MainViewModel(
+                ytDlpService,
+                fileDialogService,
+                outputPathHolder,
+                updateService,
+                downloads,
+                settings);
+
+            CrashLog.Info("Creating main window");
+            _window = new MainWindow(_viewModel);
+            _viewModel.WindowHandle = NativeWindowService.GetWindowHandle(_window);
+            _window.Closed += (_, _) => DisposeServices();
+
+            CrashLog.Info("Creating tray icon");
+            _trayIconService = new TrayIconService(_window, _viewModel);
+            downloads.PropertyChanged += (_, eventArgs) =>
             {
-                if (_window is not null && _viewModel is not null)
+                if (eventArgs.PropertyName == nameof(DownloadViewModel.IsBusy))
                 {
-                    NativeWindowService.ShowAndActivate(_window);
-                    await _viewModel.HandleCommandLineAsync(command);
+                    _trayIconService.SetBusy(downloads.IsBusy);
                 }
-            }));
+            };
 
-        _window.Activate();
-        if (settings.StartMinimized)
-        {
-            NativeWindowService.Hide(_window);
+            _clipboardMonitor = new ClipboardMonitor(dispatcherQueue)
+            {
+                IsEnabled = settings.MonitorClipboard
+            };
+            _clipboardMonitor.SupportedUrlDetected += (_, url) =>
+                dispatcherQueue.TryEnqueue(async () => await _viewModel.AcceptDetectedClipboardUrlAsync(url));
+            settings.PropertyChanged += (_, eventArgs) =>
+            {
+                if (eventArgs.PropertyName == nameof(SettingsViewModel.MonitorClipboard) && _clipboardMonitor is not null)
+                {
+                    _clipboardMonitor.IsEnabled = settings.MonitorClipboard;
+                }
+            };
+
+            _singleInstanceService.StartListening(command =>
+                dispatcherQueue.TryEnqueue(async () =>
+                {
+                    if (_window is not null && _viewModel is not null)
+                    {
+                        NativeWindowService.ShowAndActivate(_window);
+                        await _viewModel.HandleCommandLineAsync(command);
+                    }
+                }));
+
+            CrashLog.Info("Activating main window");
+            _window.Activate();
+            if (settings.StartMinimized)
+            {
+                NativeWindowService.Hide(_window);
+            }
+
+            await _viewModel.InitializeAsync();
+            if (URLDetector.TryExtractFirstUrl(launchCommand, out _))
+            {
+                await _viewModel.HandleCommandLineAsync(launchCommand);
+            }
+
+            CrashLog.Info("Launch completed");
         }
-
-        await _viewModel.InitializeAsync();
-        if (URLDetector.TryExtractFirstUrl(launchCommand, out _))
+        catch (Exception exception)
         {
-            await _viewModel.HandleCommandLineAsync(launchCommand);
+            CrashLog.Error(exception, "Launch failed");
+            throw;
         }
     }
 

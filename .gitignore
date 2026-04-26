@@ -8,3 +8,4 @@ artifacts/
 Clip/Resources/bin/*.exe
 !Clip/Resources/bin/.gitkeep
 Clip/Resources/bin/*.dll
+ClipInstaller/Resources/clip-payload.zip

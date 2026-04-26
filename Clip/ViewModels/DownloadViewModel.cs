@@ -303,7 +303,11 @@ public sealed class DownloadViewModel : ObservableObject
 
         if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
         {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = path,
+                UseShellExecute = true
+            });
         }
     }
 
@@ -317,10 +321,30 @@ public sealed class DownloadViewModel : ObservableObject
             _ => null
         };
 
-        var directory = File.Exists(path) ? Path.GetDirectoryName(path) : path;
-        if (!string.IsNullOrWhiteSpace(directory) && Directory.Exists(directory))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+            return;
+        }
+
+        if (File.Exists(path))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{path}\"",
+                UseShellExecute = false
+            });
+            return;
+        }
+
+        if (Directory.Exists(path))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{path}\"",
+                UseShellExecute = false
+            });
         }
     }
 
