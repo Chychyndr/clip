@@ -66,7 +66,13 @@ public sealed class DownloadItem : ObservableEntity
     public double Progress
     {
         get => _progress;
-        set => SetProperty(ref _progress, Math.Clamp(value, 0, 100));
+        set
+        {
+            if (SetProperty(ref _progress, Math.Clamp(value, 0, 100)))
+            {
+                OnPropertyChanged(nameof(ProgressLabel));
+            }
+        }
     }
 
     public string StatusText
@@ -130,4 +136,5 @@ public sealed class DownloadItem : ObservableEntity
         Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled;
 
     public bool CanRetry => Status is DownloadStatus.Failed or DownloadStatus.Cancelled;
+    public string ProgressLabel => $"{Progress:0}%";
 }

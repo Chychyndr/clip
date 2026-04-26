@@ -32,7 +32,7 @@
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <TextBlock Grid.Column="1"
-                                       Text="{Binding Progress, StringFormat='{}{0:0}%'}"
+                                       Text="{Binding ProgressLabel}"
                                        VerticalAlignment="Top"
                                        Foreground="{StaticResource ClipLavenderBrush}" />
                         </Grid>

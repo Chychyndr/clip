@@ -35,7 +35,7 @@ public sealed class ProcessRunner
             startInfo.ArgumentList.Add(argument);
         }
 
-        startInfo.Environment["PATH"] = BuildPath(startInfo.Environment.TryGetValue("PATH", out var currentPath) ? currentPath : "");
+        startInfo.Environment["PATH"] = BuildPath(startInfo.Environment.TryGetValue("PATH", out var currentPath) ? currentPath ?? "" : "");
 
         var output = new StringBuilder();
         var error = new StringBuilder();

@@ -14,6 +14,9 @@ if (Test-Path $output) {
 }
 
 dotnet publish $project -c $Configuration -r $Runtime --self-contained true -o $output
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 $bin = Join-Path $output "Resources\bin"
 $required = @("yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe")

@@ -59,7 +59,6 @@
             </Style>
 
             <Style TargetType="ProgressBar">
-                <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="MinHeight" Value="8" />
             </Style>
         </ResourceDictionary>
