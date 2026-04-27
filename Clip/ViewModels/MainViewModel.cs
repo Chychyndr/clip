@@ -25,7 +25,6 @@ public sealed class MainViewModel : ObservableObject
     private bool _useCustomTargetSize;
     private double _targetSizeMegabytes = 50;
     private string _saveDirectory = ClipConstants.DefaultDownloadDirectory;
-    private bool _showSettings;
     private string? _updateMessage;
 
     public MainViewModel(
@@ -50,7 +49,6 @@ public sealed class MainViewModel : ObservableObject
         ChooseFolderCommand = new AsyncRelayCommand(ChooseFolderAsync);
         ClearCommand = new RelayCommand(Clear);
         DismissUpdateCommand = new RelayCommand(() => UpdateMessage = null);
-        ToggleSettingsCommand = new RelayCommand(() => ShowSettings = !ShowSettings);
     }
 
     public IReadOnlyList<string> Formats { get; } = ["MP4", "MOV", "WebM", "MP3"];
@@ -67,7 +65,6 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ChooseFolderCommand { get; }
     public RelayCommand ClearCommand { get; }
     public RelayCommand DismissUpdateCommand { get; }
-    public RelayCommand ToggleSettingsCommand { get; }
 
     public IntPtr WindowHandle { get; set; }
 
@@ -167,12 +164,6 @@ public sealed class MainViewModel : ObservableObject
                 _ = _outputPathHolder.SetAsync(value);
             }
         }
-    }
-
-    public bool ShowSettings
-    {
-        get => _showSettings;
-        set => SetProperty(ref _showSettings, value);
     }
 
     public string? UpdateMessage

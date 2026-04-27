@@ -7,7 +7,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <TextBlock Text="{Binding Feedback}"
@@ -17,12 +16,6 @@
                        Text="{Binding Downloads.QueueSummary}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                        VerticalAlignment="Center" />
-            <Button Grid.Column="2"
-                    Style="{StaticResource IconButtonStyle}"
-                    Command="{Binding ToggleSettingsCommand}"
-                    ToolTipService.ToolTip="Settings">
-                <SymbolIcon Symbol="Setting" />
-            </Button>
         </Grid>
     </Border>
 </UserControl>

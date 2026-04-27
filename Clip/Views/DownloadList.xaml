@@ -9,15 +9,15 @@
               BorderThickness="0">
         <ListView.ItemTemplate>
             <DataTemplate>
-                <Border Style="{StaticResource CompactGlassCardBorderStyle}" Margin="0,0,0,8">
-                    <Grid RowSpacing="8">
+                <Border Style="{StaticResource CompactGlassCardBorderStyle}" Padding="8" Margin="0,0,0,6">
+                    <Grid RowSpacing="6">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <Grid ColumnSpacing="8">
+                        <Grid ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -41,7 +41,7 @@
                                      Maximum="100"
                                      Value="{Binding Progress}" />
 
-                        <Grid Grid.Row="2" ColumnSpacing="8">
+                        <Grid Grid.Row="2" ColumnSpacing="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -50,7 +50,7 @@
                                        Foreground="{StaticResource ClipCoralBrush}"
                                        TextWrapping="Wrap"
                                        Visibility="{Binding ErrorMessage, Converter={StaticResource NullToVisibilityConverter}}" />
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                                 <Button Style="{StaticResource IconButtonStyle}"
                                         Click="OnCancelClicked"
                                         ToolTipService.ToolTip="Cancel">

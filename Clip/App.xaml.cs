@@ -115,6 +115,8 @@ public partial class App : Application
 
             CrashLog.Info("Activating main window");
             _window.Activate();
+            _window.ApplyInitialSize();
+            _window.ScheduleInitialSize();
             if (settings.StartMinimized)
             {
                 NativeWindowService.Hide(_window);
@@ -125,6 +127,9 @@ public partial class App : Application
             {
                 await _viewModel.HandleCommandLineAsync(launchCommand);
             }
+
+            _window.ApplyInitialSize();
+            _window.ScheduleInitialSize();
 
             CrashLog.Info("Launch completed");
         }

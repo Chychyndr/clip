@@ -1,6 +1,7 @@
 param(
     [string]$Configuration = "Release",
-    [string]$Runtime = "win-x64"
+    [string]$Runtime = "win-x64",
+    [string]$Platform = "x64"
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,10 +12,8 @@ $output = Join-Path $root "artifacts\Clip-$Runtime"
 
 Get-Process Clip -ErrorAction SilentlyContinue | ForEach-Object {
     try {
-        if ($_.Path -like "$output*") {
-            Stop-Process -Id $_.Id -Force
-            $_.WaitForExit(5000)
-        }
+        Stop-Process -Id $_.Id -Force
+        [void]$_.WaitForExit(5000)
     }
     catch {
     }
@@ -36,13 +35,18 @@ if (Test-Path $output) {
     }
 }
 
-dotnet publish $project -c $Configuration -r $Runtime --self-contained true -o $output
+dotnet clean $project -c $Configuration -r $Runtime -p:Platform=$Platform
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
+dotnet publish $project -c $Configuration -r $Runtime -p:Platform=$Platform --self-contained true -o $output
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
 $framework = "net8.0-windows10.0.19041.0"
-$buildOutput = Join-Path $root "Clip\bin\$Configuration\$framework\$Runtime"
+$buildOutput = Join-Path $root "Clip\bin\$Platform\$Configuration\$framework\$Runtime"
 if (Test-Path $buildOutput) {
     Get-ChildItem -LiteralPath $buildOutput -Filter "*.xbf" -File | ForEach-Object {
         Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $output $_.Name) -Force

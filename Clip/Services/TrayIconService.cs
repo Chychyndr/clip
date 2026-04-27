@@ -16,9 +16,12 @@ public sealed class TrayIconService : IDisposable
     private const int NimDelete = 0x00000002;
     private const int NimSetVersion = 0x00000004;
     private const int NotifyIconVersion4 = 4;
+    private const int WmNull = 0x0000;
     private const int WmLButtonUp = 0x0202;
     private const int WmRButtonUp = 0x0205;
-    private const int GwlWndProc = -4;
+    private const int WmContextMenu = 0x007B;
+    private const int NinSelect = 0x0400;
+    private const int NinKeySelect = 0x0401;
     private const int IdiApplication = 32512;
     private const int MfString = 0x00000000;
     private const int MfSeparator = 0x00000800;
@@ -30,26 +33,32 @@ public sealed class TrayIconService : IDisposable
 
     private readonly MainWindow _window;
     private readonly MainViewModel _viewModel;
-    private readonly IntPtr _windowHandle;
+    private readonly WindowProcedure _windowProcedure;
+    private readonly string _callbackWindowClassName;
+    private readonly IntPtr _moduleHandle;
+    private readonly IntPtr _callbackWindowHandle;
     private readonly IntPtr _iconHandle;
     private readonly bool _ownsIconHandle;
-    private readonly WindowProcedure _newWindowProcedure;
-    private IntPtr _oldWindowProcedure;
     private bool _isDisposed;
 
     public TrayIconService(MainWindow window, MainViewModel viewModel)
     {
         _window = window;
         _viewModel = viewModel;
-        _windowHandle = NativeWindowService.GetWindowHandle(window);
+        _windowProcedure = WndProc;
+        _callbackWindowClassName = $"ClipTrayIconWindow-{Guid.NewGuid():N}";
+        _moduleHandle = GetModuleHandle(null);
+        _callbackWindowHandle = CreateCallbackWindow(_callbackWindowClassName, _moduleHandle, _windowProcedure);
         (_iconHandle, _ownsIconHandle) = LoadTrayIcon();
-        _newWindowProcedure = WndProc;
-        _oldWindowProcedure = SetWindowProcedure(_windowHandle, _newWindowProcedure);
 
         AddOrUpdateIcon("Clip is ready", NimAdd);
+
         var data = CreateNotifyIconData("Clip is ready");
         data.uVersion = NotifyIconVersion4;
-        ShellNotifyIcon(NimSetVersion, ref data);
+        if (!ShellNotifyIcon(NimSetVersion, ref data))
+        {
+            LogLastWin32Error("Shell_NotifyIcon(NIM_SETVERSION) failed");
+        }
     }
 
     public void SetBusy(bool isBusy)
@@ -59,29 +68,31 @@ public sealed class TrayIconService : IDisposable
 
     private IntPtr WndProc(IntPtr hWnd, uint message, UIntPtr wParam, IntPtr lParam)
     {
-        if (message == CallbackMessage && wParam.ToUInt32() == TrayIconId)
+        if (message == CallbackMessage && TryGetTrayAction(wParam, lParam, out var action))
         {
-            var mouseMessage = lParam.ToInt32();
-            if (mouseMessage == WmLButtonUp)
+            if (action == TrayAction.ToggleWindow)
             {
                 ToggleWindow();
                 return IntPtr.Zero;
             }
 
-            if (mouseMessage == WmRButtonUp)
+            if (action == TrayAction.ShowMenu)
             {
                 ShowContextMenu();
                 return IntPtr.Zero;
             }
         }
 
-        return CallWindowProc(_oldWindowProcedure, hWnd, message, wParam, lParam);
+        return DefWindowProc(hWnd, message, wParam, lParam);
     }
 
     private void AddOrUpdateIcon(string tooltip, int message)
     {
         var data = CreateNotifyIconData(tooltip);
-        ShellNotifyIcon(message, ref data);
+        if (!ShellNotifyIcon(message, ref data))
+        {
+            LogLastWin32Error($"Shell_NotifyIcon({message}) failed");
+        }
     }
 
     private NotifyIconData CreateNotifyIconData(string tooltip)
@@ -89,7 +100,7 @@ public sealed class TrayIconService : IDisposable
         return new NotifyIconData
         {
             cbSize = Marshal.SizeOf<NotifyIconData>(),
-            hWnd = _windowHandle,
+            hWnd = _callbackWindowHandle,
             uID = TrayIconId,
             uFlags = NifMessage | NifIcon | NifTip,
             uCallbackMessage = CallbackMessage,
@@ -103,6 +114,7 @@ public sealed class TrayIconService : IDisposable
         var menu = CreatePopupMenu();
         if (menu == IntPtr.Zero)
         {
+            LogLastWin32Error("CreatePopupMenu failed");
             return;
         }
 
@@ -113,13 +125,20 @@ public sealed class TrayIconService : IDisposable
             AppendMenu(menu, MfString, 3, "Вставить ссылку");
             AppendMenu(menu, MfString, 4, "Начать загрузку");
             AppendMenu(menu, MfString, 5, _viewModel.Downloads.IsPaused ? "Продолжить очередь" : "Поставить очередь на паузу");
-            AppendMenu(menu, MfString, 6, "Настройки");
             AppendMenu(menu, MfSeparator, 0, null);
-            AppendMenu(menu, MfString, 7, "Отключить Clip");
+            AppendMenu(menu, MfString, 6, "Отключить Clip");
 
             GetCursorPos(out var point);
-            SetForegroundWindow(_windowHandle);
-            var command = TrackPopupMenu(menu, TpmRightButton | TpmReturnCommand, point.X, point.Y, 0, _windowHandle, IntPtr.Zero);
+            SetForegroundWindow(_callbackWindowHandle);
+            var command = TrackPopupMenu(
+                menu,
+                TpmRightButton | TpmReturnCommand,
+                point.X,
+                point.Y,
+                0,
+                _callbackWindowHandle,
+                IntPtr.Zero);
+            PostMessage(_callbackWindowHandle, WmNull, UIntPtr.Zero, IntPtr.Zero);
             _ = HandleMenuCommandAsync(command);
         }
         finally
@@ -150,10 +169,6 @@ public sealed class TrayIconService : IDisposable
                 _viewModel.Downloads.TogglePause();
                 break;
             case 6:
-                _viewModel.ShowSettings = true;
-                ShowWindow();
-                break;
-            case 7:
                 _window.AllowClose = true;
                 Dispose();
                 _window.Close();
@@ -163,17 +178,61 @@ public sealed class TrayIconService : IDisposable
 
     private void ToggleWindow()
     {
-        if (NativeWindowService.IsVisible(_window))
+        var windowHandle = NativeWindowService.GetWindowHandle(_window);
+        var isVisible = NativeWindowService.IsVisible(windowHandle);
+        if (isVisible)
         {
-            NativeWindowService.Hide(_window);
+            NativeWindowService.Hide(windowHandle);
         }
         else
         {
-            ShowWindow();
+            NativeWindowService.ShowAndActivate(_window, windowHandle);
         }
     }
 
     private void ShowWindow() => NativeWindowService.ShowAndActivate(_window);
+
+    private static bool TryGetTrayAction(UIntPtr wParam, IntPtr lParam, out TrayAction action)
+    {
+        action = TrayAction.None;
+
+        if (LowDWord(wParam) == TrayIconId)
+        {
+            var mouseMessage = LowDWord(lParam);
+            if (mouseMessage == WmLButtonUp)
+            {
+                action = TrayAction.ToggleWindow;
+                return true;
+            }
+
+            if (mouseMessage == WmRButtonUp || mouseMessage == WmContextMenu)
+            {
+                action = TrayAction.ShowMenu;
+                return true;
+            }
+        }
+
+        var notification = LowWord(lParam);
+        var iconId = HighWord(lParam);
+        if (iconId != TrayIconId)
+        {
+            return false;
+        }
+
+        if (notification is NinSelect or NinKeySelect or WmLButtonUp)
+        {
+            action = TrayAction.ToggleWindow;
+            return true;
+        }
+
+        if (notification is WmContextMenu or WmRButtonUp)
+        {
+            action = TrayAction.ShowMenu;
+            return true;
+        }
+
+        return false;
+    }
 
     public void Dispose()
     {
@@ -183,19 +242,63 @@ public sealed class TrayIconService : IDisposable
         }
 
         _isDisposed = true;
+
         var data = CreateNotifyIconData("");
         ShellNotifyIcon(NimDelete, ref data);
 
-        if (_oldWindowProcedure != IntPtr.Zero)
+        if (_callbackWindowHandle != IntPtr.Zero)
         {
-            SetWindowProcedure(_windowHandle, _oldWindowProcedure);
-            _oldWindowProcedure = IntPtr.Zero;
+            DestroyWindow(_callbackWindowHandle);
+        }
+
+        if (_moduleHandle != IntPtr.Zero)
+        {
+            UnregisterClass(_callbackWindowClassName, _moduleHandle);
         }
 
         if (_ownsIconHandle && _iconHandle != IntPtr.Zero)
         {
             DestroyIcon(_iconHandle);
         }
+    }
+
+    private static IntPtr CreateCallbackWindow(string className, IntPtr moduleHandle, WindowProcedure windowProcedure)
+    {
+        var windowClass = new WindowClass
+        {
+            cbSize = Marshal.SizeOf<WindowClass>(),
+            hInstance = moduleHandle,
+            lpfnWndProc = Marshal.GetFunctionPointerForDelegate(windowProcedure),
+            lpszClassName = className
+        };
+
+        if (RegisterClassEx(ref windowClass) == 0)
+        {
+            LogLastWin32Error("RegisterClassEx failed");
+            return IntPtr.Zero;
+        }
+
+        var windowHandle = CreateWindowEx(
+            0,
+            className,
+            "Clip tray callback window",
+            0,
+            0,
+            0,
+            0,
+            0,
+            IntPtr.Zero,
+            IntPtr.Zero,
+            moduleHandle,
+            IntPtr.Zero);
+
+        if (windowHandle == IntPtr.Zero)
+        {
+            LogLastWin32Error("CreateWindowEx failed");
+            UnregisterClass(className, moduleHandle);
+        }
+
+        return windowHandle;
     }
 
     private static (IntPtr Handle, bool ShouldDestroy) LoadTrayIcon()
@@ -213,21 +316,42 @@ public sealed class TrayIconService : IDisposable
         return (LoadIcon(IntPtr.Zero, new IntPtr(IdiApplication)), false);
     }
 
-    private static IntPtr SetWindowProcedure(IntPtr windowHandle, WindowProcedure procedure)
-    {
-        return IntPtr.Size == 8
-            ? SetWindowLongPtr(windowHandle, GwlWndProc, Marshal.GetFunctionPointerForDelegate(procedure))
-            : SetWindowLong(windowHandle, GwlWndProc, Marshal.GetFunctionPointerForDelegate(procedure));
-    }
+    private static int LowWord(IntPtr value) => unchecked((short)((long)value & 0xffff));
 
-    private static IntPtr SetWindowProcedure(IntPtr windowHandle, IntPtr procedure)
-    {
-        return IntPtr.Size == 8
-            ? SetWindowLongPtr(windowHandle, GwlWndProc, procedure)
-            : SetWindowLong(windowHandle, GwlWndProc, procedure);
-    }
+    private static int HighWord(IntPtr value) => unchecked((short)(((long)value >> 16) & 0xffff));
+
+    private static int LowDWord(IntPtr value) => unchecked((int)((long)value & 0xffffffff));
+
+    private static int LowDWord(UIntPtr value) => unchecked((int)(value.ToUInt64() & 0xffffffff));
+
+    private static void LogLastWin32Error(string message) =>
+        CrashLog.Info($"{message}. LastWin32Error={Marshal.GetLastWin32Error()}");
 
     private delegate IntPtr WindowProcedure(IntPtr hWnd, uint message, UIntPtr wParam, IntPtr lParam);
+
+    private enum TrayAction
+    {
+        None,
+        ToggleWindow,
+        ShowMenu
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WindowClass
+    {
+        public int cbSize;
+        public int style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string? lpszMenuName;
+        public string lpszClassName;
+        public IntPtr hIconSm;
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct NotifyIconData
@@ -265,48 +389,75 @@ public sealed class TrayIconService : IDisposable
         public int Y;
     }
 
-    [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)]
+    [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShellNotifyIcon(int message, ref NotifyIconData data);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string? moduleName);
+
+    [DllImport("user32.dll", EntryPoint = "RegisterClassExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern ushort RegisterClassEx(ref WindowClass windowClass);
+
+    [DllImport("user32.dll", EntryPoint = "UnregisterClassW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnregisterClass(string className, IntPtr instance);
+
+    [DllImport("user32.dll", EntryPoint = "CreateWindowExW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(
+        int extendedStyle,
+        string className,
+        string windowName,
+        int style,
+        int x,
+        int y,
+        int width,
+        int height,
+        IntPtr parentWindow,
+        IntPtr menu,
+        IntPtr instance,
+        IntPtr parameter);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    private static extern IntPtr DefWindowProc(IntPtr hWnd, uint message, UIntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadIcon(IntPtr instance, IntPtr iconName);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadImage(IntPtr instance, string name, int type, int width, int height, int load);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr icon);
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
-    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int index, IntPtr newLong);
-
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
-    private static extern IntPtr SetWindowLong(IntPtr hWnd, int index, IntPtr newLong);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallWindowProc(IntPtr previousProcedure, IntPtr hWnd, uint message, UIntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr CreatePopupMenu();
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool AppendMenu(IntPtr menu, int flags, int newItemId, string? newItem);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyMenu(IntPtr menu);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out Point point);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr hWnd, int message, UIntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
     private static extern int TrackPopupMenu(IntPtr menu, int flags, int x, int y, int reserved, IntPtr hWnd, IntPtr rectangle);
 }
