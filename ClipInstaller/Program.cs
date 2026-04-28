@@ -267,7 +267,7 @@ internal static class Program
 
         key.SetValue("DisplayName", AppName);
         key.SetValue("DisplayIcon", $"{exePath},0");
-        key.SetValue("DisplayVersion", "1.0.0");
+        key.SetValue("DisplayVersion", "1.1.0");
         key.SetValue("InstallLocation", installDirectory);
         key.SetValue("Publisher", AppName);
         key.SetValue("UninstallString", $"\"{uninstallerPath}\" /uninstall");
