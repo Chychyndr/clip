@@ -34,11 +34,11 @@
                 </Grid.ColumnDefinitions>
 
                 <ToggleSwitch Header="Target size"
-                              OffContent="Original"
-                              OnContent="Custom MB"
-                              IsOn="{Binding UseCustomTargetSize, Mode=TwoWay}" />
+                              OffContent="Custom"
+                              OnContent="Original"
+                              IsOn="{Binding UseCustomTargetSize, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}" />
                 <NumberBox Grid.Column="1"
-                           Header="MB"
+                           Header="Target MB"
                            Value="{Binding TargetSizeMegabytes, Mode=TwoWay}"
                            Minimum="1"
                            Maximum="20480"
@@ -48,11 +48,24 @@
                            IsEnabled="{Binding UseCustomTargetSize}" />
             </Grid>
 
-            <ToggleSwitch Grid.Row="2"
-                          Header="Clip"
-                          OffContent="Full media"
-                          OnContent="Trim range"
-                          IsOn="{Binding ClipRange.IsEnabled, Mode=TwoWay}" />
+            <Grid Grid.Row="2" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ToggleSwitch Header="Clip"
+                              OffContent="Trim range"
+                              OnContent="Full media"
+                              IsOn="{Binding ClipRange.IsEnabled, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}" />
+
+                <ToggleSwitch Grid.Column="1"
+                              Header="Clip output"
+                              OffContent="Cropped only"
+                              OnContent="Cropped + original"
+                              IsOn="{Binding Settings.KeepOriginalWhenClipping, Mode=TwoWay}"
+                              Visibility="{Binding ClipRange.IsEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+            </Grid>
         </Grid>
     </Border>
 </UserControl>

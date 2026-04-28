@@ -17,6 +17,12 @@ public static class NativeWindowService
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
+    private const int ImageIcon = 1;
+    private const int LrLoadFromFile = 0x00000010;
+    private const int LrDefaultSize = 0x00000040;
+    private const int WmSetIcon = 0x0080;
+    private const int IconSmall = 0;
+    private const int IconBig = 1;
 
     public static IntPtr GetWindowHandle(Window window) => WindowNative.GetWindowHandle(window);
 
@@ -37,6 +43,18 @@ public static class NativeWindowService
             width,
             height,
             SwpNoMove | SwpNoZOrder | SwpNoActivate);
+    }
+
+    public static void SetWindowIcon(Window window, string iconPath)
+    {
+        if (!File.Exists(iconPath))
+        {
+            return;
+        }
+
+        var windowHandle = GetTopLevelWindowHandle(window);
+        SetIcon(windowHandle, IconSmall, iconPath);
+        SetIcon(windowHandle, IconBig, iconPath);
     }
 
     public static void Hide(Window window) => Hide(GetTopLevelWindowHandle(window));
@@ -106,6 +124,17 @@ public static class NativeWindowService
         return string.Equals(builder.ToString(), className, StringComparison.Ordinal);
     }
 
+    private static void SetIcon(IntPtr windowHandle, int iconSize, string iconPath)
+    {
+        var icon = LoadImage(IntPtr.Zero, iconPath, ImageIcon, 0, 0, LrLoadFromFile | LrDefaultSize);
+        if (icon == IntPtr.Zero)
+        {
+            return;
+        }
+
+        SendMessage(windowHandle, WmSetIcon, new UIntPtr((uint)iconSize), icon);
+    }
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -141,6 +170,12 @@ public static class NativeWindowService
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder className, int maxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadImage(IntPtr instance, string name, int type, int width, int height, int load);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr windowHandle, int message, UIntPtr wParam, IntPtr lParam);
 
     private delegate bool EnumWindowsProcedure(IntPtr hWnd, IntPtr lParam);
 }

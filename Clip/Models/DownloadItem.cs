@@ -13,6 +13,7 @@ public sealed class DownloadItem : ObservableEntity
     private string _format = "MP4";
     private string _resolution = "1080p";
     private bool _useCustomTargetSize;
+    private bool _keepOriginalWhenClipping;
     private bool _isCancelled;
     private double _targetSizeMegabytes = 50;
     private string _saveDirectory = ClipConstants.DefaultDownloadDirectory;
@@ -103,6 +104,12 @@ public sealed class DownloadItem : ObservableEntity
     {
         get => _useCustomTargetSize;
         set => SetProperty(ref _useCustomTargetSize, value);
+    }
+
+    public bool KeepOriginalWhenClipping
+    {
+        get => _keepOriginalWhenClipping;
+        set => SetProperty(ref _keepOriginalWhenClipping, value);
     }
 
     public bool IsCancelled

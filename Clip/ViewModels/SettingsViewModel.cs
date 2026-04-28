@@ -10,6 +10,7 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _hideToTrayOnClose = true;
     private bool _startMinimized;
     private bool _checkForYtDlpUpdates = true;
+    private bool _keepOriginalWhenClipping;
     private bool _suppressSave;
 
     public bool MonitorClipboard
@@ -72,6 +73,18 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
+    public bool KeepOriginalWhenClipping
+    {
+        get => _keepOriginalWhenClipping;
+        set
+        {
+            if (SetProperty(ref _keepOriginalWhenClipping, value))
+            {
+                Save();
+            }
+        }
+    }
+
     public static SettingsViewModel Load()
     {
         var settings = new SettingsViewModel { _suppressSave = true };
@@ -90,6 +103,7 @@ public sealed class SettingsViewModel : ObservableObject
                     settings.HideToTrayOnClose = loaded.HideToTrayOnClose;
                     settings.StartMinimized = loaded.StartMinimized;
                     settings.CheckForYtDlpUpdates = loaded.CheckForYtDlpUpdates;
+                    settings.KeepOriginalWhenClipping = loaded.KeepOriginalWhenClipping;
                 }
             }
         }
@@ -119,7 +133,8 @@ public sealed class SettingsViewModel : ObservableObject
             AutoAnalyzeClipboard = AutoAnalyzeClipboard,
             HideToTrayOnClose = HideToTrayOnClose,
             StartMinimized = StartMinimized,
-            CheckForYtDlpUpdates = CheckForYtDlpUpdates
+            CheckForYtDlpUpdates = CheckForYtDlpUpdates,
+            KeepOriginalWhenClipping = KeepOriginalWhenClipping
         };
         File.WriteAllText(ClipConstants.SettingsPath, JsonSerializer.Serialize(snapshot, JsonOptions));
     }
@@ -131,5 +146,6 @@ public sealed class SettingsViewModel : ObservableObject
         public bool HideToTrayOnClose { get; set; } = true;
         public bool StartMinimized { get; set; }
         public bool CheckForYtDlpUpdates { get; set; } = true;
+        public bool KeepOriginalWhenClipping { get; set; }
     }
 }

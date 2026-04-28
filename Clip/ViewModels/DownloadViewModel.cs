@@ -154,34 +154,65 @@ public sealed class DownloadViewModel : ObservableObject
 
             item.Status = DownloadStatus.Downloading;
             item.StatusText = "Starting yt-dlp";
-            var progress = new Progress<DownloadProgress>(update =>
-            {
-                item.Progress = update.Percent;
-                item.StatusText = FriendlyProgress(update.Message);
-            });
+            item.Progress = Math.Max(item.Progress, 5);
 
-            var outputPath = await _ytDlpService.DownloadAsync(item, progress, cancellationToken);
+            var hasClip = item.ClipRange.IsEnabled && item.ClipRange.LengthSeconds > 0;
+            var hasCompression = item.UseCustomTargetSize;
+            var downloadEnd = hasClip && hasCompression
+                ? 76
+                : hasClip
+                    ? 84
+                    : hasCompression
+                        ? 82
+                        : 98;
 
-            if (item.ClipRange.IsEnabled && item.ClipRange.LengthSeconds > 0)
+            var outputPath = await RunStageAsync(
+                item,
+                5,
+                downloadEnd,
+                progress => _ytDlpService.DownloadAsync(item, progress, cancellationToken),
+                cancellationToken);
+            item.Progress = Math.Max(item.Progress, downloadEnd);
+
+            if (hasClip)
             {
                 item.Status = DownloadStatus.Converting;
-                item.Progress = 0;
                 item.StatusText = "Clipping selection";
-                outputPath = await _ffmpegService.ClipAsync(outputPath, item.ClipRange, progress, cancellationToken);
+                var originalPath = outputPath;
+                var clipEnd = hasCompression ? 90 : 98;
+                outputPath = await RunStageAsync(
+                    item,
+                    downloadEnd,
+                    clipEnd,
+                    progress => _ffmpegService.ClipAsync(originalPath, item.ClipRange, progress, cancellationToken),
+                    cancellationToken);
+                if (!item.KeepOriginalWhenClipping)
+                {
+                    TryDeleteIntermediateFile(originalPath, outputPath);
+                }
+
+                item.Progress = Math.Max(item.Progress, clipEnd);
             }
 
-            if (item.UseCustomTargetSize)
+            if (hasCompression)
             {
                 item.Status = DownloadStatus.Compressing;
-                item.Progress = 0;
                 item.StatusText = "Compressing to target size";
                 var duration = item.ClipRange.IsEnabled ? item.ClipRange.LengthSeconds : item.Metadata?.DurationSeconds;
-                outputPath = await _ffmpegService.CompressToTargetSizeAsync(
-                    outputPath,
-                    item.TargetSizeMegabytes,
-                    duration,
-                    progress,
+                var compressStart = hasClip ? 90 : downloadEnd;
+                var compressionInputPath = outputPath;
+                outputPath = await RunStageAsync(
+                    item,
+                    compressStart,
+                    98,
+                    progress => _ffmpegService.CompressToTargetSizeAsync(
+                        compressionInputPath,
+                        item.TargetSizeMegabytes,
+                        duration,
+                        progress,
+                        cancellationToken),
                     cancellationToken);
+                item.Progress = Math.Max(item.Progress, 98);
             }
 
             item.OutputFilePath = outputPath;
@@ -407,6 +438,72 @@ public sealed class DownloadViewModel : ObservableObject
         OnPropertyChanged(nameof(QueueSummary));
     }
 
+    private async Task<T> RunStageAsync<T>(
+        DownloadItem item,
+        double start,
+        double end,
+        Func<IProgress<DownloadProgress>, Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        using var animationCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var animationTask = AnimateProgressAsync(item, start, Math.Max(start, end - 2), animationCancellation.Token);
+        try
+        {
+            return await action(CreateStageProgress(item, start, end));
+        }
+        finally
+        {
+            animationCancellation.Cancel();
+            await IgnoreCancellationAsync(animationTask);
+        }
+    }
+
+    private IProgress<DownloadProgress> CreateStageProgress(DownloadItem item, double start, double end)
+    {
+        return new Progress<DownloadProgress>(update =>
+        {
+            if (double.IsFinite(update.Percent))
+            {
+                var percent = Math.Clamp(update.Percent, 0, 100);
+                var mapped = start + ((end - start) * percent / 100);
+                item.Progress = Math.Max(item.Progress, mapped);
+            }
+
+            item.StatusText = FriendlyProgress(update.Message);
+        });
+    }
+
+    private async Task AnimateProgressAsync(DownloadItem item, double start, double cap, CancellationToken cancellationToken)
+    {
+        RunOnUi(() => item.Progress = Math.Max(item.Progress, start));
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(350, cancellationToken);
+            RunOnUi(() =>
+            {
+                if (!item.IsActive || item.Progress >= cap)
+                {
+                    return;
+                }
+
+                var remaining = cap - item.Progress;
+                item.Progress = Math.Min(cap, item.Progress + Math.Max(0.2, remaining * 0.025));
+            });
+        }
+    }
+
+    private static async Task IgnoreCancellationAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private void RunOnUi(Action action)
     {
         if (_dispatcherQueue.HasThreadAccess)
@@ -426,9 +523,43 @@ public sealed class DownloadViewModel : ObservableObject
             return "Working";
         }
 
-        return message
+        var text = message
             .Replace("download:", "", StringComparison.OrdinalIgnoreCase)
             .Replace("[download]", "", StringComparison.OrdinalIgnoreCase)
             .Trim();
+
+        var parts = text.Split('|', StringSplitOptions.TrimEntries);
+        if (parts.Length >= 3)
+        {
+            var speed = string.IsNullOrWhiteSpace(parts[1]) || parts[1] == "N/A"
+                ? ""
+                : $" at {parts[1]}";
+            var eta = string.IsNullOrWhiteSpace(parts[2]) || parts[2] == "N/A"
+                ? ""
+                : $" - ETA {parts[2]}";
+            return $"{parts[0]} downloaded{speed}{eta}";
+        }
+
+        return text;
+    }
+
+    private static void TryDeleteIntermediateFile(string sourcePath, string outputPath)
+    {
+        if (string.Equals(sourcePath, outputPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(sourcePath))
+            {
+                File.Delete(sourcePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Info($"Could not delete intermediate file {sourcePath}: {ex.Message}");
+        }
     }
 }

@@ -1,49 +1,81 @@
 # Clip
 
 <p align="center">
+  <img src="Clip/Assets/Square150x150Logo.png" width="96" height="96" alt="Clip app icon">
+</p>
+
+<p align="center">
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-0078D4?style=flat-square&logo=windows">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8-512BD4?style=flat-square&logo=dotnet">
   <img alt="WinUI 3" src="https://img.shields.io/badge/WinUI-3-2B7FFF?style=flat-square">
   <img alt="yt-dlp" src="https://img.shields.io/badge/yt--dlp-bundled-23B894?style=flat-square">
 </p>
 
-Clip - Windows-приложение для скачивания видео и аудио по ссылке. Внутри используются `yt-dlp`, `ffmpeg` и `ffprobe`.
+Clip is a Windows app for downloading video and audio from supported links. It uses `yt-dlp`, `ffmpeg`, and `ffprobe` under the hood, then gives the common download, trim, and compression controls a native WinUI interface.
 
-## Что умеет
+## Table of Contents
 
-| Возможность | Как работает |
+- [Description](#description)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Supported Services](#supported-services)
+- [Tray Menu](#tray-menu)
+- [TXT Import](#txt-import)
+- [Build](#build)
+- [Portable Build](#portable-build)
+- [Installer](#installer)
+- [Code Signing](#code-signing)
+- [Troubleshooting](#troubleshooting)
+- [Local Data](#local-data)
+
+## Description
+
+Clip is designed for quick link-based downloads. Paste a URL, drag a URL into the window, or import a `.txt` file with links. The app analyzes a pasted URL automatically, shows the preview when metadata is available, and queues downloads one at a time.
+
+## Screenshots
+
+
+![Main window](docs/screenshots/main-window.png)
+
+![Clip settings](docs/screenshots/clip-settings.png)
+
+![Download progress](docs/screenshots/download-progress.png)
+
+## Features
+
+| Feature | Description |
 | --- | --- |
-| Одна ссылка | Вставьте ссылку, нажмите `Analyze`, затем `Download`. |
-| TXT со ссылками | Нажмите `TXT` и выберите файл со ссылками. |
-| Drag and drop | Перетащите ссылку или `.txt` файл в окно приложения. |
-| Буфер обмена | Автоматически подхватываются только ссылки на поддерживаемые видеосервисы. |
-| Очередь | Загрузки идут последовательно, по одной. |
-| Форматы | `MP4`, `MOV`, `WebM`, `MP3`. |
-| Качество | `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`, `Original`. |
-| Обрезка | Можно указать начало и конец фрагмента. |
-| История | Готовые загрузки сохраняются в локальной истории. |
+| Single link downloads | Paste a supported URL and Clip analyzes it automatically. |
+| TXT import | Import a `.txt` file that contains one or more supported links. |
+| Drag and drop | Drop a link or `.txt` file into the app window. |
+| Clipboard monitoring | Clip can detect supported URLs copied to the clipboard. |
+| Queue | Downloads run sequentially, one active item at a time. |
+| Formats | `MP4`, `MOV`, `WebM`, and `MP3`. |
+| Resolution | `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`, or `Original`. |
+| Target size | Keep the original size or compress to a custom megabyte target. |
+| Clip range | Download the full media or save a selected trim range. |
+| Clip output mode | Save only the cropped clip by default, or keep both cropped and original files. |
+| History | Completed downloads are stored in local history. |
 
-## Сервисы
+## Supported Services
 
-Clip распознает эти платформы:
-
-| Сервис | Нюансы |
+| Service | Notes |
 | --- | --- |
-| YouTube / YouTube Shorts | Публичные ссылки идут без cookies. Если YouTube просит вход, Clip пробует cookies из браузера. |
-| X / Twitter | Доступность зависит от ограничений самого X. |
-| Instagram | Для части ссылок нужен вход в браузере. |
-| TikTok | Публичные ссылки обычно работают через `yt-dlp`. |
-| Reddit | Ссылки разбираются через `api.reddit.com`. |
+| YouTube / YouTube Shorts | Public links work without cookies. If YouTube asks for sign-in, Clip tries browser cookies. |
+| X / Twitter | Availability depends on X platform restrictions. |
+| Instagram | Some links require an active browser login. |
+| TikTok | Public links usually work through `yt-dlp`. |
+| Reddit | Links are resolved through `api.reddit.com`. |
 
-Ссылки на другие сайты игнорируются при автопроверке буфера обмена, импорте TXT и drag and drop.
+Unsupported services are ignored by clipboard monitoring, TXT import, and drag and drop.
 
-## Трей
+## Tray Menu
 
-Если включено скрытие в трей, кнопка закрытия Windows прячет окно. Через иконку в трее можно развернуть Clip, скрыть окно, вставить ссылку, начать загрузку, поставить очередь на паузу или полностью выключить приложение.
+When "Hide to tray on close" is enabled, the Windows close button hides the window instead of exiting. The tray menu can show or hide Clip, paste a link, start the current download, pause or resume the queue, and exit the app.
 
-## TXT импорт
+## TXT Import
 
-Файл может содержать ссылки в любом из таких вариантов:
+A TXT file can contain links on separate lines or mixed with common separators:
 
 ```text
 https://youtu.be/example1
@@ -52,11 +84,11 @@ https://x.com/user/status/123; https://www.instagram.com/reel/example/
 https://youtu.be/example3: https://reddit.com/r/videos/comments/example
 ```
 
-Повторяющиеся ссылки добавляются один раз.
+Duplicate links are queued once.
 
-## Сборка
+## Build
 
-Положите бинарники сюда:
+Place the required binaries here:
 
 ```text
 Clip\Resources\bin\yt-dlp.exe
@@ -64,76 +96,78 @@ Clip\Resources\bin\ffmpeg.exe
 Clip\Resources\bin\ffprobe.exe
 ```
 
-Команды:
+Build commands:
 
 ```powershell
 dotnet restore
 dotnet build .\Clip.sln -c Debug -p:Platform=x64
 ```
 
-Запуск из исходников:
+Run from source:
 
 ```powershell
 dotnet run --project .\Clip\Clip.csproj
 ```
 
-## Готовый EXE
+## Portable Build
 
-Portable-сборка:
+Create a portable build:
 
 ```powershell
 .\scripts\publish-unpackaged.ps1
 ```
 
-Результат:
+Output:
 
 ```text
 artifacts\Clip-win-x64\Clip.exe
 ```
 
-Папку `Clip-win-x64` нужно переносить целиком.
+Move the whole `Clip-win-x64` folder when distributing the portable build.
 
-Установщик одним файлом:
+## Installer
+
+Create a single-file installer:
 
 ```powershell
 .\scripts\build-installer.ps1
 ```
 
-Результат:
+Output:
 
 ```text
 artifacts\ClipSetup.exe
 ```
 
-Установщик кладет приложение в:
+The installer places the app in:
 
 ```text
 %LOCALAPPDATA%\Programs\Clip
 ```
 
-Удаление:
+Uninstall:
 
 ```powershell
 .\artifacts\ClipSetup.exe /uninstall
 ```
 
-После установки Clip также появляется в Windows Settings -> Apps -> Installed apps. Для локальной очистки из репозитория можно использовать:
+Clip also appears in Windows Settings -> Apps -> Installed apps. For local cleanup from the repository, use:
 
 ```powershell
 .\scripts\uninstall.ps1
 ```
 
-По умолчанию удаляется только приложение, ярлыки и запись uninstall. История, настройки и лог в `%LOCALAPPDATA%\Clip` сохраняются. Чтобы удалить и пользовательские данные:
+By default, uninstall removes only the app, shortcuts, and uninstall entry. History, settings, and logs in `%LOCALAPPDATA%\Clip` are preserved. To remove user data too:
 
 ```powershell
 .\scripts\uninstall.ps1 -RemoveUserData
 ```
 
-## Подпись сертификатом
+## Code Signing
 
-Для публичного релиза нужен code-signing certificate от доверенного центра сертификации. Самоподписанный сертификат подходит для локальной проверки.
+Public releases should be signed with a trusted code-signing certificate. A self-signed certificate is useful only for local testing.
 
-Создать тестовый сертификат:
+Create a test certificate:
 
 ```powershell
 mkdir certs
@@ -150,7 +184,7 @@ Export-PfxCertificate `
   -Password $password
 ```
 
-Собрать и подписать `Clip.exe` внутри установщика и сам `ClipSetup.exe`:
+Build and sign `Clip.exe` inside the installer, then sign `ClipSetup.exe`:
 
 ```powershell
 $password = Read-Host "PFX password" -AsSecureString
@@ -159,30 +193,30 @@ $password = Read-Host "PFX password" -AsSecureString
   -CertificatePassword $password
 ```
 
-Проверить подпись:
+Verify the signature:
 
 ```powershell
 signtool verify /pa /v .\artifacts\ClipSetup.exe
 ```
 
-`signtool.exe` входит в Windows SDK и доступен из Visual Studio Developer PowerShell. Сертификаты, `.pfx` файлы и пароли храните вне git.
+`signtool.exe` is included with the Windows SDK and is available from Visual Studio Developer PowerShell. Keep certificates, `.pfx` files, and passwords out of git.
 
-## Частые ошибки
+## Troubleshooting
 
-| Ошибка | Решение |
+| Problem | Fix |
 | --- | --- |
-| `Missing required binary` | Проверьте `yt-dlp.exe`, `ffmpeg.exe`, `ffprobe.exe` в `Clip\Resources\bin`. |
-| `Sign in to confirm you're not a bot` | Войдите в YouTube в Chrome, Edge, Firefox или Brave и повторите загрузку. Clip подключает cookies только после такой ошибки. |
-| `Could not copy Chrome cookie database` | Закройте Chrome и повторите попытку. Если есть Edge, Firefox или Brave, Clip попробует их тоже. |
-| `Clip could not locate the output file` | Обновите `yt-dlp.exe`, проверьте папку загрузки и права записи. |
-| SmartScreen предупреждает при запуске | Подпишите релиз доверенным code-signing certificate. |
-| Drag and drop не сработал | Перетаскивайте сам текст ссылки, ссылку из адресной строки или `.txt` файл в окно Clip. |
+| `Missing required binary` | Check `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` in `Clip\Resources\bin`. |
+| `Sign in to confirm you're not a bot` | Sign in to YouTube in Chrome, Edge, Firefox, or Brave, then retry. |
+| `Could not copy Chrome cookie database` | Close Chrome and retry. Clip can also try Edge, Firefox, or Brave if available. |
+| `Clip could not locate the output file` | Update `yt-dlp.exe`, check the output folder, and verify write permissions. |
+| SmartScreen warning | Sign the release with a trusted code-signing certificate. |
+| Drag and drop did not work | Drop URL text, a browser address bar link, or a `.txt` file into the Clip window. |
 
-## Данные
+## Local Data
 
 ```text
-Загрузки:  %USERPROFILE%\Downloads\Clip
-История:   %LOCALAPPDATA%\Clip\history.json
-Настройки: %LOCALAPPDATA%\Clip\settings.json
-Лог:       %LOCALAPPDATA%\Clip\crash.log
+Downloads: %USERPROFILE%\Downloads\Clip
+History:   %LOCALAPPDATA%\Clip\history.json
+Settings:  %LOCALAPPDATA%\Clip\settings.json
+Log:       %LOCALAPPDATA%\Clip\crash.log
 ```

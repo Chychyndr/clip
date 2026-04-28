@@ -14,9 +14,12 @@ public sealed class MainViewModel : ObservableObject
     private readonly OutputPathHolder _outputPathHolder;
     private readonly UpdateService _updateService;
     private readonly CancellationTokenSource _shutdown = new();
+    private CancellationTokenSource? _autoAnalyzeCancellation;
     private string _urlText = "";
+    private string? _lastAnalyzedUrl;
     private string _feedback = "Paste a link to begin.";
     private bool _isAnalyzing;
+    private bool _suppressUrlAutoAnalyze;
     private VideoMetadata? _metadata;
     private ImageSource? _thumbnailImage;
     private Platform _detectedPlatform = Platform.Unknown;
@@ -81,7 +84,18 @@ public sealed class MainViewModel : ObservableObject
             DetectedPlatform = URLDetector.TryExtractFirstSupportedUrl(value, out var url)
                 ? URLDetector.DetectPlatform(url)
                 : Platform.Unknown;
+            if (!string.Equals(url, _lastAnalyzedUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                Metadata = null;
+                ThumbnailImage = null;
+            }
+
             OnPropertyChanged(nameof(CanAnalyze));
+
+            if (!_suppressUrlAutoAnalyze && URLDetector.IsSupportedUrl(value))
+            {
+                ScheduleAutoAnalyze(value);
+            }
         }
     }
 
@@ -205,7 +219,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        UrlText = url;
+        SetUrlTextWithoutAutoAnalyze(url);
         IsAnalyzing = true;
         Metadata = null;
         ThumbnailImage = null;
@@ -216,6 +230,7 @@ public sealed class MainViewModel : ObservableObject
             DetectedPlatform = URLDetector.DetectPlatform(url);
             var metadata = await _ytDlpService.AnalyzeAsync(url, _shutdown.Token);
             Metadata = metadata;
+            _lastAnalyzedUrl = url;
             ClipRange.DurationSeconds = metadata.DurationSeconds ?? 0;
             ClipRange.StartSeconds = 0;
             ClipRange.EndSeconds = ClipRange.DurationSeconds;
@@ -251,7 +266,7 @@ public sealed class MainViewModel : ObservableObject
             if (URLDetector.TryExtractFirstSupportedUrl(text, out var url))
             {
                 UrlText = url;
-                Feedback = "Link pasted.";
+                Feedback = "Link pasted. Analyzing...";
             }
             else
             {
@@ -340,7 +355,15 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        UrlText = url;
+        if (Settings.AutoAnalyzeClipboard)
+        {
+            UrlText = url;
+        }
+        else
+        {
+            SetUrlTextWithoutAutoAnalyze(url);
+        }
+
         Feedback = "Detected a URL on the clipboard.";
         if (Settings.AutoAnalyzeClipboard)
         {
@@ -410,6 +433,8 @@ public sealed class MainViewModel : ObservableObject
     public void Clear()
     {
         UrlText = "";
+        _lastAnalyzedUrl = null;
+        CancelAutoAnalyze();
         Metadata = null;
         ThumbnailImage = null;
         ClipRange.IsEnabled = false;
@@ -452,7 +477,8 @@ public sealed class MainViewModel : ObservableObject
             Resolution = SelectedResolution,
             UseCustomTargetSize = UseCustomTargetSize,
             TargetSizeMegabytes = TargetSizeMegabytes,
-            SaveDirectory = SaveDirectory
+            SaveDirectory = SaveDirectory,
+            KeepOriginalWhenClipping = Settings.KeepOriginalWhenClipping
         };
         item.ClipRange.IsEnabled = ClipRange.IsEnabled;
         item.ClipRange.DurationSeconds = ClipRange.DurationSeconds;
@@ -470,5 +496,65 @@ public sealed class MainViewModel : ObservableObject
         }
 
         ThumbnailImage = new BitmapImage(uri);
+    }
+
+    private void ScheduleAutoAnalyze(string text)
+    {
+        if (!URLDetector.TryExtractFirstSupportedUrl(text, out var url) ||
+            string.Equals(url, _lastAnalyzedUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        CancelAutoAnalyze();
+        _autoAnalyzeCancellation = CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token);
+        var cancellationToken = _autoAnalyzeCancellation.Token;
+        _ = AutoAnalyzeAfterDelayAsync(url, cancellationToken);
+    }
+
+    private async Task AutoAnalyzeAfterDelayAsync(string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(650, cancellationToken);
+
+            while (IsAnalyzing)
+            {
+                await Task.Delay(200, cancellationToken);
+            }
+
+            if (cancellationToken.IsCancellationRequested ||
+                !URLDetector.TryExtractFirstSupportedUrl(UrlText, out var currentUrl) ||
+                !string.Equals(currentUrl, url, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUrl, _lastAnalyzedUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            await AnalyzeCurrentUrlAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SetUrlTextWithoutAutoAnalyze(string value)
+    {
+        _suppressUrlAutoAnalyze = true;
+        try
+        {
+            UrlText = value;
+        }
+        finally
+        {
+            _suppressUrlAutoAnalyze = false;
+        }
+    }
+
+    private void CancelAutoAnalyze()
+    {
+        _autoAnalyzeCancellation?.Cancel();
+        _autoAnalyzeCancellation?.Dispose();
+        _autoAnalyzeCancellation = null;
     }
 }

@@ -19,6 +19,13 @@ public sealed partial class MainWindow : Window
         Root.DataContext = ViewModel;
         ClipTheme.ApplyMica(this);
         var appWindow = NativeWindowService.GetAppWindow(this);
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Clip.ico");
+        if (File.Exists(iconPath))
+        {
+            appWindow.SetIcon(iconPath);
+            NativeWindowService.SetWindowIcon(this, iconPath);
+        }
+
         appWindow.Closing += OnAppWindowClosing;
     }
 

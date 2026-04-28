@@ -7,7 +7,7 @@
     AllowDrop="True"
     DragOver="OnDragOver"
     Drop="OnDrop">
-    <Grid Padding="16,0,16,14" RowSpacing="10">
+    <Grid Padding="16,14,16,14" RowSpacing="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />

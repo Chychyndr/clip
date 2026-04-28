@@ -5,27 +5,6 @@
     xmlns:views="using:Clip.Views"
     Title="Clip">
     <Grid x:Name="Root">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="48" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <Grid x:Name="AppTitleBar" Padding="18,0,12,0" ColumnSpacing="10" Background="Transparent">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <Image Width="24"
-                   Height="24"
-                   Source="ms-appx:///Assets/Square44x44Logo.png" />
-            <TextBlock Grid.Column="1"
-                       Text="Clip"
-                       VerticalAlignment="Center"
-                       FontWeight="SemiBold"
-                       FontSize="14" />
-        </Grid>
-
-        <views:ContentView Grid.Row="1" />
+        <views:ContentView />
     </Grid>
 </Window>
