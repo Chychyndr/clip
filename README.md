@@ -11,7 +11,7 @@
   <img alt="yt-dlp" src="https://img.shields.io/badge/yt--dlp-bundled-23B894?style=flat-square">
 </p>
 
-Clip is a Windows app for downloading video and audio from supported links. It uses `yt-dlp`, `ffmpeg`, and `ffprobe` under the hood, then gives the common download, trim, and compression controls a native WinUI interface.
+Clip is currently a Windows app for downloading video and audio from supported links. It uses `yt-dlp`, `ffmpeg`, and `ffprobe` under the hood, then gives the common download, trim, and compression controls a native WinUI interface. The download, queue, tool resolution, metadata cache, and ffmpeg/yt-dlp command logic are being separated into cross-platform services so a future macOS desktop UI can reuse the same core.
 
 ## Table of Contents
 
@@ -24,6 +24,7 @@ Clip is a Windows app for downloading video and audio from supported links. It u
 - [Build](#build)
 - [Portable Build](#portable-build)
 - [Installer](#installer)
+- [macOS Status and Packaging](#macos-status-and-packaging)
 - [Code Signing](#code-signing)
 - [Troubleshooting](#troubleshooting)
 - [Local Data](#local-data)
@@ -135,6 +136,8 @@ Move the whole `Clip-win-x64` folder when distributing the portable build.
 
 ## Installer
 
+The current installer script builds the Windows installer.
+
 Create a single-file installer:
 
 ```powershell
@@ -170,6 +173,83 @@ By default, uninstall removes only the app, shortcuts, and uninstall entry. Hist
 ```powershell
 .\scripts\uninstall.ps1 -RemoveUserData
 ```
+
+## macOS Status and Packaging
+
+macOS support is prepared at the service layer, but this repository does not yet contain a shipping macOS UI project or macOS installer script. The current `Clip` project is WinUI 3 and targets `net8.0-windows10.0.19041.0`, so it cannot run on macOS directly.
+
+The intended macOS path is:
+
+1. Add a cross-platform desktop UI project, for example `Clip.Desktop` based on Avalonia UI.
+2. Reference the shared core/services from that UI project.
+3. Publish separate builds for Intel and Apple Silicon.
+4. Package each build as a `.app` bundle.
+5. Sign, notarize, and distribute as a `.dmg` or `.pkg`.
+
+Expected runtime identifiers:
+
+```text
+osx-x64      macOS Intel
+osx-arm64    macOS Apple Silicon
+```
+
+Bundled tools should be placed under platform-specific folders:
+
+```text
+Clip.Desktop.app/
+  Contents/
+    MacOS/
+      Clip.Desktop
+    Resources/
+      bin/
+        osx-x64/
+          yt-dlp
+          ffmpeg
+          ffprobe
+          aria2c
+        osx-arm64/
+          yt-dlp
+          ffmpeg
+          ffprobe
+          aria2c
+```
+
+Clip also supports falling back to `PATH` when bundled tools are missing. On macOS, bundled binaries must have execute permission:
+
+```zsh
+chmod +x yt-dlp ffmpeg ffprobe aria2c
+```
+
+For public macOS distribution, the app bundle should be signed and notarized:
+
+```zsh
+codesign --deep --force --options runtime --sign "Developer ID Application: Your Name" Clip.Desktop.app
+xcrun notarytool submit Clip.dmg --keychain-profile "notary-profile" --wait
+xcrun stapler staple Clip.dmg
+```
+
+Gatekeeper may block unsigned or non-notarized builds. Local development builds can be opened manually from Finder, but releases should use Developer ID signing and notarization.
+
+macOS local data paths:
+
+```text
+Downloads:      ~/Downloads/Clip
+History:        ~/Library/Application Support/Clip/history.json
+Settings:       ~/Library/Application Support/Clip/settings.json
+Metadata cache: ~/Library/Application Support/Clip/cache/metadata
+Log:            ~/Library/Logs/Clip/clip.log
+```
+
+Current repository status:
+
+| Area | Status |
+| --- | --- |
+| Core download services | Prepared for Windows/macOS paths and tool resolution. |
+| yt-dlp/ffmpeg binaries | Supports `win-x64`, `osx-x64`, and `osx-arm64` folder layout. |
+| macOS UI | Not implemented yet. |
+| `.app` bundle | Not implemented yet. |
+| DMG/PKG installer | Not implemented yet. |
+| Signing/notarization scripts | Not implemented yet. |
 
 ## Code Signing
 

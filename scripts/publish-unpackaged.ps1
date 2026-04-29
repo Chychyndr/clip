@@ -9,30 +9,110 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root "Clip\Clip.csproj"
 $output = Join-Path $root "artifacts\Clip-$Runtime"
+$installedOutput = Join-Path $env:LOCALAPPDATA "Programs\Clip"
 
-Get-Process Clip -ErrorAction SilentlyContinue | ForEach-Object {
+function Stop-ProcessIfRunning {
+    param([Parameter(Mandatory = $true)]$Process)
+
     try {
-        Stop-Process -Id $_.Id -Force
-        [void]$_.WaitForExit(5000)
+        Stop-Process -Id $Process.Id -Force
+        [void]$Process.WaitForExit(5000)
     }
     catch {
     }
 }
 
-if (Test-Path $output) {
-    for ($attempt = 1; $attempt -le 5; $attempt++) {
+function Test-IsUnderDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Directory
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Directory)) {
+        return $false
+    }
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $fullDirectory = [System.IO.Path]::GetFullPath($Directory).TrimEnd('\') + '\'
+    return $fullPath.StartsWith($fullDirectory, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Stop-ClipProcessTree {
+    $toolNames = @("Clip", "yt-dlp", "ffmpeg", "ffprobe", "aria2c")
+    Get-Process $toolNames -ErrorAction SilentlyContinue | ForEach-Object {
+        $path = $null
         try {
-            Remove-Item -LiteralPath $output -Recurse -Force
-            break
+            $path = $_.Path
         }
         catch {
-            if ($attempt -eq 5) {
-                throw
-            }
+        }
 
-            Start-Sleep -Milliseconds 700
+        $isClip = $_.ProcessName.Equals("Clip", [System.StringComparison]::OrdinalIgnoreCase)
+        $isFromPublishOutput = $path -and (Test-IsUnderDirectory -Path $path -Directory $output)
+        $isFromInstalledClip = (Test-Path -LiteralPath $installedOutput) -and $path -and (Test-IsUnderDirectory -Path $path -Directory $installedOutput)
+
+        if ($isClip -or $isFromPublishOutput -or $isFromInstalledClip) {
+            Write-Host "Stopping $($_.ProcessName) ($($_.Id))"
+            Stop-ProcessIfRunning -Process $_
         }
     }
+}
+
+function Clear-FileAttributes {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $_.Attributes = [System.IO.FileAttributes]::Normal
+        }
+        catch {
+        }
+    }
+}
+
+function Remove-DirectoryRobust {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    Stop-ClipProcessTree
+    Clear-FileAttributes -Path $Path
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            $lastError = $_
+            Stop-ClipProcessTree
+            Start-Sleep -Milliseconds (500 * $attempt)
+        }
+    }
+
+    $stalePath = "$Path.stale-$(Get-Date -Format 'yyyyMMddHHmmss')"
+    try {
+        Move-Item -LiteralPath $Path -Destination $stalePath -Force -ErrorAction Stop
+        Write-Warning "Could not delete $Path because Windows still has a file handle open. Renamed it to $stalePath and publishing into a fresh folder."
+        return
+    }
+    catch {
+        throw "Could not clean $Path. Close Clip and any yt-dlp/ffmpeg processes, then retry. Last error: $($lastError.Exception.Message)"
+    }
+}
+
+Remove-DirectoryRobust -Path $output
+
+dotnet restore $project -r $Runtime -p:Platform=$Platform
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
 }
 
 dotnet clean $project -c $Configuration -r $Runtime -p:Platform=$Platform

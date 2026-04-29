@@ -336,8 +336,7 @@ public sealed class MainViewModel : ObservableObject
 
             if (URLDetector.TryExtractFirstSupportedUrl(text, out var url))
             {
-                UrlText = url;
-                Feedback = "Link pasted. Analyzing...";
+                await InsertUrlAndAnalyzeAsync(url, "Link pasted. Analyzing...");
             }
             else
             {
@@ -477,20 +476,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
-        if (Settings.AutoAnalyzeClipboard)
-        {
-            UrlText = url;
-        }
-        else
-        {
-            SetUrlTextWithoutAutoAnalyze(url);
-        }
-
-        Feedback = "Detected a URL on the clipboard.";
-        if (Settings.AutoAnalyzeClipboard)
-        {
-            await AnalyzeCurrentUrlAsync();
-        }
+        await InsertUrlAndAnalyzeAsync(url, "Detected a URL on the clipboard. Analyzing...");
     }
 
     public async Task AcceptDroppedDataAsync(DataPackageView dataView)
@@ -625,6 +611,21 @@ public sealed class MainViewModel : ObservableObject
         }
 
         ThumbnailImage = new BitmapImage(uri);
+    }
+
+    private async Task InsertUrlAndAnalyzeAsync(string url, string feedback)
+    {
+        CancelAutoAnalyze();
+        SetUrlTextWithoutAutoAnalyze(url);
+        Feedback = feedback;
+
+        if (string.Equals(url, _lastAnalyzedUrl, StringComparison.OrdinalIgnoreCase) && Metadata is not null)
+        {
+            Feedback = Metadata.IsFromCache ? "Ready to download. Data loaded from metadata cache." : "Ready to download.";
+            return;
+        }
+
+        await AnalyzeCurrentUrlAsync();
     }
 
     private void ScheduleAutoAnalyze(string text)

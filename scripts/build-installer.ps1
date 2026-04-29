@@ -105,6 +105,11 @@ if (Test-Path $installerOutput) {
     Remove-Item -LiteralPath $installerOutput -Recurse -Force
 }
 
+dotnet restore $installerProject -r $Runtime
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
 dotnet publish $installerProject `
     -c $Configuration `
     -r $Runtime `
