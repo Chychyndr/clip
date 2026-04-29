@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyWindowIcon();
 
         var pathService = PlatformServices.CreatePathService();
         Directory.CreateDirectory(pathService.AppDataDirectory);
@@ -51,6 +52,22 @@ public partial class MainWindow : Window
 
         DataContext = _viewModel;
         _ = _viewModel.InitializeAsync();
+    }
+
+    private void ApplyWindowIcon()
+    {
+        try
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Clip.ico");
+            if (File.Exists(iconPath))
+            {
+                Icon = new WindowIcon(iconPath);
+            }
+        }
+        catch
+        {
+            // A missing or invalid icon must not block app startup.
+        }
     }
 
     protected override void OnClosed(EventArgs e)
