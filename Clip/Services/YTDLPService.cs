@@ -2,6 +2,10 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Clip.Core.App;
+using Clip.Core.Cache;
+using Clip.Core.Tools;
+using Clip.Core.YtDlp;
 using Clip.Models;
 
 namespace Clip.Services;
@@ -15,31 +19,47 @@ public sealed partial class YTDLPService
 
     private readonly ProcessRunner _processRunner;
     private readonly RedditResolver _redditResolver;
+    private readonly ToolResolver _toolResolver;
+    private readonly MetadataCacheService _metadataCache;
+    private readonly IAppSettingsProvider _settingsProvider;
+    private readonly YtDlpProgressParser _progressParser = new();
+    private string? _ytDlpVersion;
 
-    public YTDLPService(ProcessRunner processRunner, RedditResolver redditResolver)
+    public YTDLPService(
+        ProcessRunner processRunner,
+        RedditResolver redditResolver,
+        ToolResolver toolResolver,
+        MetadataCacheService metadataCache,
+        IAppSettingsProvider settingsProvider)
     {
         _processRunner = processRunner;
         _redditResolver = redditResolver;
+        _toolResolver = toolResolver;
+        _metadataCache = metadataCache;
+        _settingsProvider = settingsProvider;
     }
 
     public IReadOnlyList<string> GetMissingBinaries(bool includeFfmpeg)
     {
         var paths = new List<string>();
-        if (!File.Exists(ClipConstants.YtDlpPath))
+        var ytDlp = _toolResolver.Resolve(ExternalTool.YtDlp);
+        if (!ytDlp.IsFound)
         {
-            paths.Add(ClipConstants.YtDlpPath);
+            paths.Add("yt-dlp was not found.");
         }
 
         if (includeFfmpeg)
         {
-            if (!File.Exists(ClipConstants.FFmpegPath))
+            var ffmpeg = _toolResolver.Resolve(ExternalTool.Ffmpeg);
+            if (!ffmpeg.IsFound)
             {
-                paths.Add(ClipConstants.FFmpegPath);
+                paths.Add("ffmpeg was not found.");
             }
 
-            if (!File.Exists(ClipConstants.FFprobePath))
+            var ffprobe = _toolResolver.Resolve(ExternalTool.Ffprobe);
+            if (!ffprobe.IsFound)
             {
-                paths.Add(ClipConstants.FFprobePath);
+                paths.Add("ffprobe was not found.");
             }
         }
 
@@ -52,6 +72,18 @@ public sealed partial class YTDLPService
         if (missing.Count > 0)
         {
             throw new MissingBinaryException(missing);
+        }
+
+        var ytDlpPath = ResolveRequiredTool(ExternalTool.YtDlp);
+        var ytDlpVersion = await ReadYtDlpVersionAsync(ytDlpPath, cancellationToken);
+        var cacheTtl = TimeSpan.FromHours(_settingsProvider.Current.MetadataCacheTtlHours);
+        const string analysisOptionsKey = "dump-single-json|no-playlist|no-warnings";
+        var cached = await _metadataCache.TryReadAsync(url, ytDlpVersion, analysisOptionsKey, cacheTtl, cancellationToken);
+        if (cached.Hit && cached.MetadataJson is not null)
+        {
+            var cachedMetadata = DeserializeMetadata(cached.MetadataJson, url);
+            cachedMetadata.IsFromCache = true;
+            return cachedMetadata;
         }
 
         var platform = URLDetector.DetectPlatform(url);
@@ -69,6 +101,7 @@ public sealed partial class YTDLPService
         var firstAttempt = await RunAnalyzeAttemptAsync(args, resolvedUrl, platform, browser: null, cancellationToken);
         if (firstAttempt.Result.IsSuccess)
         {
+            await _metadataCache.SaveAsync(url, ytDlpVersion, analysisOptionsKey, firstAttempt.StandardOutput, cancellationToken);
             return DeserializeMetadata(firstAttempt.StandardOutput, url);
         }
 
@@ -80,6 +113,7 @@ public sealed partial class YTDLPService
                 var retry = await RunAnalyzeAttemptAsync(args, resolvedUrl, platform, browser, cancellationToken);
                 if (retry.Result.IsSuccess)
                 {
+                    await _metadataCache.SaveAsync(url, ytDlpVersion, analysisOptionsKey, retry.StandardOutput, cancellationToken);
                     return DeserializeMetadata(retry.StandardOutput, url);
                 }
 
@@ -108,19 +142,31 @@ public sealed partial class YTDLPService
             ? await _redditResolver.ResolveAsync(item.Url, cancellationToken)
             : item.Url;
 
-        var firstAttempt = await RunDownloadAttemptAsync(item, url, platform, browser: null, progress, cancellationToken);
+        var firstAttempt = await RunDownloadAttemptAsync(item, url, platform, browser: null, progress, disableAria2c: false, cancellationToken);
         if (firstAttempt.Result.IsSuccess)
         {
             return ResolveDownloadedFile(firstAttempt.OutputCandidates, firstAttempt.StandardOutput, item.SaveDirectory, startedAt);
         }
 
         var lastError = firstAttempt.ErrorText;
+        if (_settingsProvider.Current.UseAria2c && LooksLikeAria2cFailure(lastError))
+        {
+            progress?.Report(new DownloadProgress(0, "aria2c failed, retrying with the regular yt-dlp downloader."));
+            var fallback = await RunDownloadAttemptAsync(item, url, platform, browser: null, progress, disableAria2c: true, cancellationToken);
+            if (fallback.Result.IsSuccess)
+            {
+                return ResolveDownloadedFile(fallback.OutputCandidates, fallback.StandardOutput, item.SaveDirectory, startedAt);
+            }
+
+            lastError = fallback.ErrorText;
+        }
+
         if (ShouldRetryWithBrowserCookies(platform, lastError))
         {
             foreach (var browser in DetectBrowserCookieSources())
             {
                 progress?.Report(new DownloadProgress(0, $"Retrying with {browser} cookies"));
-                var retry = await RunDownloadAttemptAsync(item, url, platform, browser, progress, cancellationToken);
+                var retry = await RunDownloadAttemptAsync(item, url, platform, browser, progress, disableAria2c: false, cancellationToken);
                 if (retry.Result.IsSuccess)
                 {
                     return ResolveDownloadedFile(retry.OutputCandidates, retry.StandardOutput, item.SaveDirectory, startedAt);
@@ -140,14 +186,16 @@ public sealed partial class YTDLPService
         string? browser,
         CancellationToken cancellationToken)
     {
-        var args = baseArgs.ToList();
-        AddCookieArguments(args, platform, browser);
-        args.Add(url);
+        var args = YtDlpCommandBuilder.BuildAnalyze(new YtDlpAnalyzeOptions
+        {
+            Url = url,
+            BrowserCookieSource = ShouldUseCookies(platform, browser) ? browser : null
+        });
 
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
         var result = await _processRunner.RunAsync(
-            ClipConstants.YtDlpPath,
+            ResolveRequiredTool(ExternalTool.YtDlp),
             args,
             standardOutput: line => stdout.AppendLine(line),
             standardError: line => stderr.AppendLine(line),
@@ -162,32 +210,35 @@ public sealed partial class YTDLPService
         Platform platform,
         string? browser,
         IProgress<DownloadProgress>? progress,
+        bool disableAria2c,
         CancellationToken cancellationToken)
     {
-        var args = new List<string>
+        var settings = _settingsProvider.Current;
+        var aria2cPath = ResolveOptionalTool(ExternalTool.Aria2c);
+        var useAria2c = settings.UseAria2c && !disableAria2c && !string.IsNullOrWhiteSpace(aria2cPath);
+        if (settings.UseAria2c && !disableAria2c && string.IsNullOrWhiteSpace(aria2cPath))
         {
-            "--newline",
-            "--no-playlist",
-            "--windows-filenames",
-            "--paths",
-            item.SaveDirectory,
-            "--output",
-            "%(title).200B [%(id)s].%(ext)s",
-            "--print",
-            "after_move:filepath",
-            "--progress-template",
-            "download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
-        };
+            progress?.Report(new DownloadProgress(0, "aria2c was not found, using the regular yt-dlp downloader."));
+        }
 
-        AddCookieArguments(args, platform, browser);
-        AddFormatArguments(args, item);
-        args.Add(url);
+        var args = YtDlpCommandBuilder.BuildDownload(new YtDlpDownloadOptions
+        {
+            Url = url,
+            SaveDirectory = item.SaveDirectory,
+            MediaMode = item.MediaMode,
+            Format = item.Format,
+            Resolution = item.Resolution,
+            ConcurrentFragments = settings.YtDlpConcurrentFragments,
+            UseAria2c = useAria2c,
+            Aria2cPath = aria2cPath,
+            BrowserCookieSource = ShouldUseCookies(platform, browser) ? browser : null
+        });
 
         var outputCandidates = new List<string>();
         var outputGate = new object();
         var stderr = new StringBuilder();
         var result = await _processRunner.RunAsync(
-            ClipConstants.YtDlpPath,
+            ResolveRequiredTool(ExternalTool.YtDlp),
             args,
             workingDirectory: item.SaveDirectory,
             standardOutput: line =>
@@ -226,6 +277,55 @@ public sealed partial class YTDLPService
         return metadata;
     }
 
+    private string ResolveRequiredTool(ExternalTool tool)
+    {
+        var resolved = _toolResolver.Resolve(tool);
+        if (resolved.IsFound && resolved.Path is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(resolved.Message))
+            {
+                CrashLog.Info(resolved.Message);
+            }
+
+            return resolved.Path;
+        }
+
+        throw new MissingBinaryException([resolved.Message ?? $"{ToolResolver.GetDisplayName(tool)} was not found."]);
+    }
+
+    private string? ResolveOptionalTool(ExternalTool tool)
+    {
+        var resolved = _toolResolver.Resolve(tool);
+        if (resolved.IsFound)
+        {
+            return resolved.Path;
+        }
+
+        return null;
+    }
+
+    private async Task<string> ReadYtDlpVersionAsync(string ytDlpPath, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(_ytDlpVersion))
+        {
+            return _ytDlpVersion;
+        }
+
+        try
+        {
+            var result = await _processRunner.RunAsync(ytDlpPath, ["--version"], cancellationToken: cancellationToken);
+            _ytDlpVersion = result.IsSuccess && !string.IsNullOrWhiteSpace(result.StandardOutput)
+                ? result.StandardOutput.Trim()
+                : "unknown";
+        }
+        catch
+        {
+            _ytDlpVersion = "unknown";
+        }
+
+        return _ytDlpVersion;
+    }
+
     private static string ResolveDownloadedFile(
         IReadOnlyList<string> outputCandidates,
         string standardOutput,
@@ -253,9 +353,13 @@ public sealed partial class YTDLPService
     private static void AddFormatArguments(List<string> args, DownloadItem item)
     {
         var format = item.Format.ToUpperInvariant();
-        if (format == "MP3")
+        var isAudioOnly = item.MediaMode.Equals("Only audio", StringComparison.OrdinalIgnoreCase) ||
+                          format == "MP3";
+        var isVideoOnly = item.MediaMode.Equals("Only video", StringComparison.OrdinalIgnoreCase);
+
+        if (isAudioOnly)
         {
-            args.AddRange(["-x", "--audio-format", "mp3", "--audio-quality", "0"]);
+            args.AddRange(["-f", "ba/bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"]);
             return;
         }
 
@@ -263,7 +367,14 @@ public sealed partial class YTDLPService
         var heightFilter = height > 0 ? $"[height<={height}]" : "";
         var mergeFormat = format.ToLowerInvariant();
 
-        var selector = format switch
+        var selector = isVideoOnly
+            ? format switch
+            {
+                "WEBM" => $"bv*{heightFilter}[ext=webm]/bv*{heightFilter}/bestvideo{heightFilter}/best",
+                "MOV" => $"bv*{heightFilter}[ext=mp4]/bv*{heightFilter}/bestvideo{heightFilter}/best",
+                _ => $"bv*{heightFilter}[ext=mp4]/bv*{heightFilter}/bestvideo{heightFilter}/best"
+            }
+            : format switch
         {
             "WEBM" => $"bv*{heightFilter}[ext=webm]+ba[ext=webm]/b{heightFilter}/best",
             "MOV" => $"bv*{heightFilter}[ext=mp4]+ba[ext=m4a]/b{heightFilter}[ext=mp4]/best",
@@ -353,10 +464,21 @@ public sealed partial class YTDLPService
                extension.Equals(".mkv", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static void ReportProgress(string line, IProgress<DownloadProgress>? progress)
+    private void ReportProgress(string line, IProgress<DownloadProgress>? progress)
     {
         if (progress is null)
         {
+            return;
+        }
+
+        if (_progressParser.TryParse(line, out var parsed))
+        {
+            progress.Report(new DownloadProgress(
+                parsed.Percent ?? 0,
+                line.Trim(),
+                parsed.Speed,
+                parsed.Eta,
+                parsed.Stage));
             return;
         }
 
@@ -422,6 +544,14 @@ public sealed partial class YTDLPService
                error.Contains("authentication", StringComparison.OrdinalIgnoreCase) ||
                error.Contains("login", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool ShouldUseCookies(Platform platform, string? browser) =>
+        !string.IsNullOrWhiteSpace(browser) &&
+        platform is Platform.Instagram or Platform.YouTube;
+
+    private static bool LooksLikeAria2cFailure(string error) =>
+        error.Contains("aria2c", StringComparison.OrdinalIgnoreCase) ||
+        error.Contains("--downloader", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCookieDatabaseError(string text) =>
         text.Contains("Could not copy", StringComparison.OrdinalIgnoreCase) &&

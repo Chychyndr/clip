@@ -34,6 +34,12 @@
                         <Border CornerRadius="10" Padding="10,4" Background="{StaticResource ClipLavenderBrush}">
                             <TextBlock Text="{Binding DetectedPlatform}" Foreground="White" FontSize="12" />
                         </Border>
+                        <Border CornerRadius="10"
+                                Padding="10,4"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                Visibility="{Binding Metadata.IsFromCache, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock Text="Metadata cache" FontSize="12" />
+                        </Border>
                         <TextBlock Text="{Binding Metadata.DurationLabel}"
                                    VerticalAlignment="Center"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

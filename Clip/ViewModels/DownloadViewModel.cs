@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Dispatching;
+using Clip.Core.App;
 using Clip.Models;
 using Clip.Services;
 
@@ -12,8 +13,13 @@ public sealed class DownloadViewModel : ObservableObject
     private readonly YTDLPService _ytDlpService;
     private readonly FFmpegService _ffmpegService;
     private readonly DownloadHistory _history;
+    private readonly SettingsViewModel _settings;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly object _queueGate = new();
+    private readonly HashSet<string> _runningAnalysis = [];
+    private readonly HashSet<string> _runningDownloads = [];
+    private readonly HashSet<string> _runningFfmpeg = [];
+    private readonly SemaphoreSlim _ffmpegSemaphore = new(1, 1);
     private bool _isPaused;
     private string _historySearchText = "";
 
@@ -21,11 +27,13 @@ public sealed class DownloadViewModel : ObservableObject
         YTDLPService ytDlpService,
         FFmpegService ffmpegService,
         DownloadHistory history,
+        SettingsViewModel settings,
         DispatcherQueue dispatcherQueue)
     {
         _ytDlpService = ytDlpService;
         _ffmpegService = ffmpegService;
         _history = history;
+        _settings = settings;
         _dispatcherQueue = dispatcherQueue;
 
         foreach (var entry in _history.Items)
@@ -63,7 +71,7 @@ public sealed class DownloadViewModel : ObservableObject
                 OnPropertyChanged(nameof(QueueSummary));
                 if (!value)
                 {
-                    StartNextQueued();
+                    StartQueueWork();
                 }
             }
         }
@@ -82,7 +90,7 @@ public sealed class DownloadViewModel : ObservableObject
     }
 
     public int ActiveCount => Downloads.Count(item => item.IsActive);
-    public int QueuedCount => Downloads.Count(item => item.Status == DownloadStatus.Queued);
+    public int QueuedCount => Downloads.Count(item => item.Status is DownloadStatus.Pending or DownloadStatus.Ready);
     public bool IsBusy => ActiveCount > 0;
 
     public string QueueSummary
@@ -94,9 +102,18 @@ public sealed class DownloadViewModel : ObservableObject
                 return "Queue paused";
             }
 
-            if (ActiveCount > 0)
+            int analyzing;
+            int downloading;
+            int ffmpeg;
+            lock (_queueGate)
             {
-                return QueuedCount > 0 ? $"Downloading, {QueuedCount} queued" : "Downloading";
+                analyzing = _runningAnalysis.Count;
+                downloading = _runningDownloads.Count;
+                ffmpeg = _runningFfmpeg.Count;
+            }
+            if (analyzing + downloading + ffmpeg > 0)
+            {
+                return $"{downloading} downloading, {analyzing} analyzing, {ffmpeg} processing";
             }
 
             return QueuedCount > 0 ? $"{QueuedCount} queued" : "Ready";
@@ -107,9 +124,12 @@ public sealed class DownloadViewModel : ObservableObject
     {
         RunOnUi(() =>
         {
+            item.Status = item.Metadata is null ? DownloadStatus.Pending : DownloadStatus.Ready;
+            item.StatusText = item.Metadata is null ? "Pending analysis" : "Ready";
+            HydrateFromMetadata(item);
             Downloads.Insert(0, item);
             item.PropertyChanged += OnDownloadItemChanged;
-            StartNextQueued();
+            StartQueueWork();
             RaiseQueueState();
         });
 
@@ -118,18 +138,20 @@ public sealed class DownloadViewModel : ObservableObject
 
     public void TogglePause() => IsPaused = !IsPaused;
 
-    private void StartNextQueued()
+    private void StartQueueWork()
     {
-        if (IsPaused)
-        {
-            return;
-        }
+        StartPendingAnalyses();
+        StartReadyDownloads();
+        RaiseQueueState();
+    }
 
+    private void StartPendingAnalyses()
+    {
         lock (_queueGate)
         {
-            while (ActiveCount < ClipConstants.MaxConcurrentDownloads)
+            while (_runningAnalysis.Count < _settings.MaxConcurrentMetadataAnalysis)
             {
-                var next = Downloads.LastOrDefault(item => item.Status == DownloadStatus.Queued);
+                var next = Downloads.LastOrDefault(item => item.Status == DownloadStatus.Pending);
                 if (next is null)
                 {
                     break;
@@ -138,24 +160,86 @@ public sealed class DownloadViewModel : ObservableObject
                 next.IsCancelled = false;
                 next.Cancellation = new CancellationTokenSource();
                 next.Status = DownloadStatus.Analyzing;
-                next.Progress = 0;
+                next.CurrentStage = "Analysis";
+                next.StatusText = "Analyzing URL";
+                _runningAnalysis.Add(next.Id);
+                _ = RunAnalysisAsync(next, next.Cancellation.Token);
+            }
+        }
+    }
+
+    private void StartReadyDownloads()
+    {
+        if (IsPaused)
+        {
+            return;
+        }
+
+        lock (_queueGate)
+        {
+            while (_runningDownloads.Count < _settings.MaxConcurrentDownloads)
+            {
+                var next = Downloads.LastOrDefault(item => item.Status == DownloadStatus.Ready);
+                if (next is null)
+                {
+                    break;
+                }
+
+                next.IsCancelled = false;
+                next.Cancellation = new CancellationTokenSource();
+                next.Status = DownloadStatus.Downloading;
+                next.CurrentStage = "Download";
+                next.StatusText = "Starting yt-dlp";
+                next.Progress = Math.Max(next.Progress, 5);
+                _runningDownloads.Add(next.Id);
                 _ = RunDownloadAsync(next, next.Cancellation.Token);
             }
         }
+    }
 
-        RaiseQueueState();
+    private async Task RunAnalysisAsync(DownloadItem item, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var metadata = await _ytDlpService.AnalyzeAsync(item.Url, cancellationToken);
+            item.Metadata = metadata;
+            item.Title = metadata.DisplayTitle;
+            item.Platform = URLDetector.DetectPlatform(metadata.WebpageUrl ?? item.Url);
+            HydrateFromMetadata(item);
+            item.Status = DownloadStatus.Ready;
+            item.StatusText = metadata.IsFromCache ? "Ready - metadata cache" : "Ready";
+            item.CurrentStage = "Ready";
+        }
+        catch (OperationCanceledException)
+        {
+            MarkCancelled(item);
+        }
+        catch (MissingBinaryException ex)
+        {
+            MarkFailed(item, ex.Message, "Missing required tools");
+        }
+        catch (Exception ex)
+        {
+            MarkFailed(item, ex.Message, "Analysis failed");
+        }
+        finally
+        {
+            lock (_queueGate)
+            {
+                _runningAnalysis.Remove(item.Id);
+            }
+
+            item.Cancellation?.Dispose();
+            item.Cancellation = null;
+            StartQueueWork();
+        }
     }
 
     private async Task RunDownloadAsync(DownloadItem item, CancellationToken cancellationToken)
     {
+        var downloadSlotReleased = false;
         try
         {
-            await AnalyzeQueuedItemAsync(item, cancellationToken);
-
-            item.Status = DownloadStatus.Downloading;
-            item.StatusText = "Starting yt-dlp";
-            item.Progress = Math.Max(item.Progress, 5);
-
             var hasClip = item.ClipRange.IsEnabled && item.ClipRange.LengthSeconds > 0;
             var hasCompression = item.UseCustomTargetSize;
             var downloadEnd = hasClip && hasCompression
@@ -172,12 +256,71 @@ public sealed class DownloadViewModel : ObservableObject
                 downloadEnd,
                 progress => _ytDlpService.DownloadAsync(item, progress, cancellationToken),
                 cancellationToken);
-            item.Progress = Math.Max(item.Progress, downloadEnd);
 
+            item.OutputFilePath = outputPath;
+            item.Progress = Math.Max(item.Progress, downloadEnd);
+            ReleaseDownloadSlot(item, ref downloadSlotReleased);
+
+            if (hasClip || hasCompression)
+            {
+                outputPath = await RunPostProcessingAsync(item, outputPath, hasClip, hasCompression, downloadEnd, cancellationToken);
+            }
+
+            item.OutputFilePath = outputPath;
+            item.CompletedAt = DateTimeOffset.Now;
+            item.Progress = 100;
+            item.Status = DownloadStatus.Completed;
+            item.CurrentStage = "Completed";
+            item.StatusText = "Completed";
+            AddHistory(item, DownloadStatus.Completed);
+        }
+        catch (OperationCanceledException)
+        {
+            MarkCancelled(item);
+        }
+        catch (MissingBinaryException ex)
+        {
+            MarkFailed(item, ex.Message, "Missing required tools");
+        }
+        catch (Exception ex)
+        {
+            MarkFailed(item, ex.Message, "Failed");
+        }
+        finally
+        {
+            ReleaseDownloadSlot(item, ref downloadSlotReleased);
+            item.Cancellation?.Dispose();
+            item.Cancellation = null;
+            RaiseQueueState();
+            StartQueueWork();
+        }
+    }
+
+    private async Task<string> RunPostProcessingAsync(
+        DownloadItem item,
+        string inputPath,
+        bool hasClip,
+        bool hasCompression,
+        double downloadEnd,
+        CancellationToken cancellationToken)
+    {
+        item.Status = DownloadStatus.PostProcessing;
+        item.CurrentStage = "Post-processing";
+        item.StatusText = "Waiting for ffmpeg";
+        await _ffmpegSemaphore.WaitAsync(cancellationToken);
+        lock (_queueGate)
+        {
+            _runningFfmpeg.Add(item.Id);
+        }
+
+        try
+        {
+            var outputPath = inputPath;
             if (hasClip)
             {
-                item.Status = DownloadStatus.Converting;
-                item.StatusText = "Clipping selection";
+                item.StatusText = _settings.TrimMode == TrimMode.Fast
+                    ? "Fast trim with stream copy"
+                    : "Exact trim with re-encode";
                 var originalPath = outputPath;
                 var clipEnd = hasCompression ? 90 : 98;
                 outputPath = await RunStageAsync(
@@ -196,7 +339,6 @@ public sealed class DownloadViewModel : ObservableObject
 
             if (hasCompression)
             {
-                item.Status = DownloadStatus.Compressing;
                 item.StatusText = "Compressing to target size";
                 var duration = item.ClipRange.IsEnabled ? item.ClipRange.LengthSeconds : item.Metadata?.DurationSeconds;
                 var compressStart = hasClip ? 90 : downloadEnd;
@@ -215,62 +357,34 @@ public sealed class DownloadViewModel : ObservableObject
                 item.Progress = Math.Max(item.Progress, 98);
             }
 
-            item.OutputFilePath = outputPath;
-            item.CompletedAt = DateTimeOffset.Now;
-            item.Progress = 100;
-            item.Status = DownloadStatus.Completed;
-            item.StatusText = "Completed";
-
-            var historyEntry = new DownloadHistoryEntry(
-                item.Title,
-                item.Url,
-                item.Platform,
-                item.Format,
-                item.Resolution,
-                outputPath,
-                item.CompletedAt.Value);
-            _history.Add(historyEntry);
-            RefreshHistoryFilter();
-        }
-        catch (OperationCanceledException)
-        {
-            item.Status = DownloadStatus.Cancelled;
-            item.StatusText = "Cancelled";
-        }
-        catch (MissingBinaryException ex)
-        {
-            item.Status = DownloadStatus.Failed;
-            item.ErrorMessage = ex.Message;
-            item.StatusText = "Missing bundled binaries";
-        }
-        catch (Exception ex)
-        {
-            item.Status = DownloadStatus.Failed;
-            item.ErrorMessage = ex.Message;
-            item.StatusText = "Failed";
+            return outputPath;
         }
         finally
         {
-            item.Cancellation?.Dispose();
-            item.Cancellation = null;
+            lock (_queueGate)
+            {
+                _runningFfmpeg.Remove(item.Id);
+            }
+
+            _ffmpegSemaphore.Release();
             RaiseQueueState();
-            StartNextQueued();
         }
     }
 
-    private async Task AnalyzeQueuedItemAsync(DownloadItem item, CancellationToken cancellationToken)
+    private void ReleaseDownloadSlot(DownloadItem item, ref bool released)
     {
-        if (item.Metadata is not null)
+        if (released)
         {
             return;
         }
 
-        item.Status = DownloadStatus.Analyzing;
-        item.StatusText = "Analyzing URL";
-        var metadata = await _ytDlpService.AnalyzeAsync(item.Url, cancellationToken);
-        item.Metadata = metadata;
-        item.Title = metadata.DisplayTitle;
-        item.Platform = URLDetector.DetectPlatform(metadata.WebpageUrl ?? item.Url);
+        lock (_queueGate)
+        {
+            _runningDownloads.Remove(item.Id);
+        }
+
+        released = true;
+        StartReadyDownloads();
     }
 
     private void Cancel(DownloadItem? item)
@@ -280,11 +394,9 @@ public sealed class DownloadViewModel : ObservableObject
             return;
         }
 
-        if (item.Status == DownloadStatus.Queued)
+        if (item.Status is DownloadStatus.Pending or DownloadStatus.Ready)
         {
-            item.IsCancelled = true;
-            item.Status = DownloadStatus.Cancelled;
-            item.StatusText = "Cancelled";
+            MarkCancelled(item);
             RaiseQueueState();
             return;
         }
@@ -303,10 +415,12 @@ public sealed class DownloadViewModel : ObservableObject
         item.ErrorMessage = null;
         item.IsCancelled = false;
         item.Progress = 0;
-        item.Status = DownloadStatus.Queued;
-        item.StatusText = "Queued";
+        item.Speed = null;
+        item.Eta = null;
+        item.Status = item.Metadata is null ? DownloadStatus.Pending : DownloadStatus.Ready;
+        item.StatusText = item.Metadata is null ? "Pending analysis" : "Ready";
         await EnqueueAsyncIfMissing(item);
-        StartNextQueued();
+        StartQueueWork();
     }
 
     private Task RedownloadAsync(DownloadHistoryEntry? entry)
@@ -374,7 +488,7 @@ public sealed class DownloadViewModel : ObservableObject
             return;
         }
 
-        if (File.Exists(path))
+        if (OperatingSystem.IsWindows() && File.Exists(path))
         {
             Process.Start(new ProcessStartInfo
             {
@@ -385,15 +499,19 @@ public sealed class DownloadViewModel : ObservableObject
             return;
         }
 
-        if (Directory.Exists(path))
+        var folder = File.Exists(path) ? Path.GetDirectoryName(path) : path;
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"\"{path}\"",
-                UseShellExecute = false
-            });
+            return;
         }
+
+        var fileName = OperatingSystem.IsMacOS() ? "open" : "explorer.exe";
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = fileName,
+            ArgumentList = { folder },
+            UseShellExecute = false
+        });
     }
 
     private void ClearHistory()
@@ -413,7 +531,8 @@ public sealed class DownloadViewModel : ObservableObject
                 : _history.Items.Where(entry =>
                     entry.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                     entry.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    entry.Platform.ToString().Contains(query, StringComparison.OrdinalIgnoreCase));
+                    entry.Platform.ToString().Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                    entry.Status.ToString().Contains(query, StringComparison.OrdinalIgnoreCase));
 
             foreach (var entry in entries)
             {
@@ -469,6 +588,9 @@ public sealed class DownloadViewModel : ObservableObject
                 item.Progress = Math.Max(item.Progress, mapped);
             }
 
+            item.Speed = update.Speed;
+            item.Eta = update.Eta;
+            item.CurrentStage = update.Stage ?? item.CurrentStage;
             item.StatusText = FriendlyProgress(update.Message);
         });
     }
@@ -502,6 +624,57 @@ public sealed class DownloadViewModel : ObservableObject
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private void MarkCancelled(DownloadItem item)
+    {
+        item.IsCancelled = true;
+        item.Status = DownloadStatus.Cancelled;
+        item.CurrentStage = "Cancelled";
+        item.StatusText = "Cancelled";
+        item.CompletedAt = DateTimeOffset.Now;
+        AddHistory(item, DownloadStatus.Cancelled);
+    }
+
+    private void MarkFailed(DownloadItem item, string message, string statusText)
+    {
+        item.Status = DownloadStatus.Failed;
+        item.ErrorMessage = message;
+        item.CurrentStage = "Failed";
+        item.StatusText = statusText;
+        item.CompletedAt = DateTimeOffset.Now;
+        AddHistory(item, DownloadStatus.Failed);
+    }
+
+    private void AddHistory(DownloadItem item, DownloadStatus status)
+    {
+        if (item.CompletedAt is null)
+        {
+            item.CompletedAt = DateTimeOffset.Now;
+        }
+
+        var historyEntry = new DownloadHistoryEntry(
+            item.Title,
+            item.Url,
+            item.Platform,
+            item.Format,
+            item.Resolution,
+            item.OutputFilePath ?? "",
+            item.CompletedAt.Value,
+            status);
+        _history.Add(historyEntry);
+        RefreshHistoryFilter();
+    }
+
+    private static void HydrateFromMetadata(DownloadItem item)
+    {
+        if (item.Metadata is null)
+        {
+            return;
+        }
+
+        item.Thumbnail = item.Metadata.BestThumbnail;
+        item.DurationSeconds = item.Metadata.DurationSeconds;
     }
 
     private void RunOnUi(Action action)

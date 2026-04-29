@@ -1,5 +1,8 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Clip.Core.Cache;
+using Clip.Core.Ffmpeg;
+using Clip.Core.Tools;
 using Clip.Models;
 using Clip.Services;
 using Clip.ViewModels;
@@ -56,21 +59,26 @@ public partial class App : Application
 
             var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
             var processRunner = new ProcessRunner();
+            var toolResolver = new ToolResolver(ClipConstants.AppBaseDirectory);
+            var metadataCache = new MetadataCacheService(ClipConstants.MetadataCacheDirectory);
             var redditResolver = new RedditResolver();
-            var ytDlpService = new YTDLPService(processRunner, redditResolver);
-            var ffmpegService = new FFmpegService(processRunner);
-            var updateService = new UpdateService(processRunner);
             var fileDialogService = new FileDialogService();
             var outputPathHolder = new OutputPathHolder();
             var settings = SettingsViewModel.Load();
+            var encoderDetector = new FfmpegEncoderDetector(processRunner, toolResolver);
+            var ytDlpService = new YTDLPService(processRunner, redditResolver, toolResolver, metadataCache, settings);
+            var ffmpegService = new FFmpegService(processRunner, toolResolver, settings, encoderDetector);
+            var updateService = new UpdateService(processRunner, toolResolver, metadataCache);
             var history = DownloadHistory.Load(ClipConstants.HistoryPath);
-            var downloads = new DownloadViewModel(ytDlpService, ffmpegService, history, dispatcherQueue);
+            var downloads = new DownloadViewModel(ytDlpService, ffmpegService, history, settings, dispatcherQueue);
 
             _viewModel = new MainViewModel(
                 ytDlpService,
+                ffmpegService,
                 fileDialogService,
                 outputPathHolder,
                 updateService,
+                metadataCache,
                 downloads,
                 settings);
 

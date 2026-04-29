@@ -8,9 +8,15 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Grid ColumnSpacing="12">
+            <RadioButtons Header="Content"
+                          ItemsSource="{Binding MediaModes}"
+                          SelectedItem="{Binding SelectedMediaMode, Mode=TwoWay}"
+                          MaxColumns="3" />
+
+            <Grid Grid.Row="1" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
@@ -23,10 +29,11 @@
                               Header="Resolution"
                               ItemsSource="{Binding Resolutions}"
                               SelectedItem="{Binding SelectedResolution, Mode=TwoWay}"
-                              MaxColumns="4" />
+                              MaxColumns="4"
+                              IsEnabled="{Binding IsAudioOnlyMode, Converter={StaticResource InverseBooleanConverter}}" />
             </Grid>
 
-            <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid Grid.Row="2" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="160" />
@@ -36,7 +43,8 @@
                 <ToggleSwitch Header="Target size"
                               OffContent="Custom"
                               OnContent="Original"
-                              IsOn="{Binding UseCustomTargetSize, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}" />
+                              IsOn="{Binding UseCustomTargetSize, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}"
+                              IsEnabled="{Binding IsVideoOutputMode}" />
                 <NumberBox Grid.Column="1"
                            Header="Target MB"
                            Value="{Binding TargetSizeMegabytes, Mode=TwoWay}"
@@ -45,10 +53,10 @@
                            SmallChange="5"
                            LargeChange="50"
                            SpinButtonPlacementMode="Inline"
-                           IsEnabled="{Binding UseCustomTargetSize}" />
+                           IsEnabled="{Binding CanEditTargetSize}" />
             </Grid>
 
-            <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid Grid.Row="3" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />

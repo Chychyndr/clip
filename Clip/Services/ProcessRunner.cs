@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using System.Text;
+using Clip.Core.Processes;
 
 namespace Clip.Services;
 
-public sealed class ProcessRunner
+public sealed class ProcessRunner : IExternalProcessRunner
 {
     public async Task<ProcessResult> RunAsync(
         string fileName,
@@ -17,6 +18,8 @@ public sealed class ProcessRunner
         {
             throw new FileNotFoundException("Executable was not found.", fileName);
         }
+
+        CrashLog.Info($"Starting process: {Path.GetFileName(fileName)} {SanitizeArguments(arguments)}");
 
         var startInfo = new ProcessStartInfo
         {
@@ -87,19 +90,78 @@ public sealed class ProcessRunner
             throw;
         }
 
-        return new ProcessResult(process.ExitCode, output.ToString(), error.ToString());
+        var processResult = new ProcessResult(process.ExitCode, output.ToString(), error.ToString());
+        if (!processResult.IsSuccess)
+        {
+            CrashLog.Info($"{Path.GetFileName(fileName)} exited with code {process.ExitCode}.");
+        }
+
+        return processResult;
+    }
+
+    async Task<ExternalProcessResult> IExternalProcessRunner.RunAsync(
+        string fileName,
+        IEnumerable<string> arguments,
+        string? workingDirectory,
+        Action<string>? standardOutput,
+        Action<string>? standardError,
+        CancellationToken cancellationToken)
+    {
+        var result = await RunAsync(fileName, arguments, workingDirectory, standardOutput, standardError, cancellationToken);
+        return new ExternalProcessResult(result.ExitCode, result.StandardOutput, result.StandardError);
     }
 
     private static string BuildPath(string currentPath)
     {
-        var entries = new List<string> { ClipConstants.BinDirectory };
+        var entries = new List<string> { ClipConstants.BinDirectory, ClipConstants.LegacyBinDirectory };
         entries.AddRange(ClipConstants.ExtraProbePaths);
         if (!string.IsNullOrWhiteSpace(currentPath))
         {
             entries.Add(currentPath);
         }
 
-        return string.Join(";", entries.Where(entry => !string.IsNullOrWhiteSpace(entry)));
+        return string.Join(Path.PathSeparator, entries.Where(entry => !string.IsNullOrWhiteSpace(entry)));
+    }
+
+    private static string SanitizeArguments(IEnumerable<string> arguments)
+    {
+        var sanitized = new List<string>();
+        var redactNext = false;
+        foreach (var argument in arguments)
+        {
+            if (redactNext)
+            {
+                sanitized.Add("<redacted>");
+                redactNext = false;
+                continue;
+            }
+
+            sanitized.Add(ShouldRedact(argument) ? "<redacted>" : SanitizeUrl(argument));
+            redactNext = argument.Contains("cookies", StringComparison.OrdinalIgnoreCase) ||
+                         argument.Contains("header", StringComparison.OrdinalIgnoreCase) ||
+                         argument.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+                         argument.Contains("token", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Join(" ", sanitized);
+    }
+
+    private static bool ShouldRedact(string argument) =>
+        argument.Contains("cookie:", StringComparison.OrdinalIgnoreCase) ||
+        argument.Contains("authorization:", StringComparison.OrdinalIgnoreCase) ||
+        argument.Contains("token=", StringComparison.OrdinalIgnoreCase) ||
+        argument.Contains("password=", StringComparison.OrdinalIgnoreCase);
+
+    private static string SanitizeUrl(string argument)
+    {
+        if (!Uri.TryCreate(argument, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+            string.IsNullOrWhiteSpace(uri.Query))
+        {
+            return argument;
+        }
+
+        return new UriBuilder(uri) { Query = "query=redacted" }.Uri.AbsoluteUri;
     }
 
     private static void KillProcessTree(Process process)

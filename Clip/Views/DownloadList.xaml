@@ -30,6 +30,10 @@
                                 <TextBlock Text="{Binding StatusText}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding CurrentStage}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           FontSize="12"
+                                           TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                             <TextBlock Grid.Column="1"
                                        Text="{Binding ProgressLabel}"

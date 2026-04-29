@@ -2,6 +2,7 @@ bin/
 obj/
 artifacts/
 .dotnet/
+.dotnet_home/
 .vs/
 *.user
 *.suo

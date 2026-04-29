@@ -30,7 +30,7 @@ Clip is a Windows app for downloading video and audio from supported links. It u
 
 ## Description
 
-Clip is designed for quick link-based downloads. Paste a URL, drag a URL into the window, or import a `.txt` file with links. The app analyzes a pasted URL automatically, shows the preview when metadata is available, and queues downloads one at a time.
+Clip is designed for quick link-based downloads. Paste a URL, drag a URL into the window, or import a `.txt` file with links. The app analyzes a pasted URL automatically, shows the preview when metadata is available, and queues downloads with configurable download and analysis concurrency.
 
 ## Screenshots
 
@@ -49,7 +49,7 @@ Clip is designed for quick link-based downloads. Paste a URL, drag a URL into th
 | TXT import | Import a `.txt` file that contains one or more supported links. |
 | Drag and drop | Drop a link or `.txt` file into the app window. |
 | Clipboard monitoring | Clip can detect supported URLs copied to the clipboard. |
-| Queue | Downloads run sequentially, one active item at a time. |
+| Queue | Downloads, metadata analysis, and ffmpeg post-processing use separate limits. |
 | Formats | `MP4`, `MOV`, `WebM`, and `MP3`. |
 | Resolution | `4K`, `1440p`, `1080p`, `720p`, `480p`, `360p`, or `Original`. |
 | Target size | Keep the original size or compress to a custom megabyte target. |
@@ -88,13 +88,21 @@ Duplicate links are queued once.
 
 ## Build
 
-Place the required binaries here:
+Place the required binaries in the platform-specific folder when bundling them:
 
 ```text
-Clip\Resources\bin\yt-dlp.exe
-Clip\Resources\bin\ffmpeg.exe
-Clip\Resources\bin\ffprobe.exe
+Clip\Resources\bin\win-x64\yt-dlp.exe
+Clip\Resources\bin\win-x64\ffmpeg.exe
+Clip\Resources\bin\win-x64\ffprobe.exe
+Clip\Resources\bin\osx-x64\yt-dlp
+Clip\Resources\bin\osx-x64\ffmpeg
+Clip\Resources\bin\osx-x64\ffprobe
+Clip\Resources\bin\osx-arm64\yt-dlp
+Clip\Resources\bin\osx-arm64\ffmpeg
+Clip\Resources\bin\osx-arm64\ffprobe
 ```
+
+Clip also checks the legacy `Clip\Resources\bin` folder and then `PATH` if a bundled tool is not present.
 
 Build commands:
 
@@ -215,8 +223,11 @@ signtool verify /pa /v .\artifacts\ClipSetup.exe
 ## Local Data
 
 ```text
-Downloads: %USERPROFILE%\Downloads\Clip
-History:   %LOCALAPPDATA%\Clip\history.json
-Settings:  %LOCALAPPDATA%\Clip\settings.json
-Log:       %LOCALAPPDATA%\Clip\crash.log
+Downloads:      %USERPROFILE%\Downloads\Clip
+History:        %APPDATA%\Clip\history.json
+Settings:       %APPDATA%\Clip\settings.json
+Metadata cache: %APPDATA%\Clip\cache\metadata
+Log:            %APPDATA%\Clip\logs\clip.log
 ```
+
+On macOS the equivalent data paths are `~/Library/Application Support/Clip` for settings/history/cache and `~/Library/Logs/Clip/clip.log` for logs.

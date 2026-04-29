@@ -1,6 +1,6 @@
-namespace Clip.Models;
+namespace Clip.Core.Queue;
 
-public enum DownloadStatus
+public enum QueueJobState
 {
     Pending,
     Analyzing,

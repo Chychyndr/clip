@@ -2,6 +2,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
+using System.Diagnostics;
+using Clip.Core.Cache;
 using Clip.Models;
 using Clip.Services;
 
@@ -10,9 +12,11 @@ namespace Clip.ViewModels;
 public sealed class MainViewModel : ObservableObject
 {
     private readonly YTDLPService _ytDlpService;
+    private readonly FFmpegService _ffmpegService;
     private readonly FileDialogService _fileDialogService;
     private readonly OutputPathHolder _outputPathHolder;
     private readonly UpdateService _updateService;
+    private readonly MetadataCacheService _metadataCache;
     private readonly CancellationTokenSource _shutdown = new();
     private CancellationTokenSource? _autoAnalyzeCancellation;
     private string _urlText = "";
@@ -23,6 +27,7 @@ public sealed class MainViewModel : ObservableObject
     private VideoMetadata? _metadata;
     private ImageSource? _thumbnailImage;
     private Platform _detectedPlatform = Platform.Unknown;
+    private string _selectedMediaMode = "Video + audio";
     private string _selectedFormat = "MP4";
     private string _selectedResolution = "1080p";
     private bool _useCustomTargetSize;
@@ -32,16 +37,20 @@ public sealed class MainViewModel : ObservableObject
 
     public MainViewModel(
         YTDLPService ytDlpService,
+        FFmpegService ffmpegService,
         FileDialogService fileDialogService,
         OutputPathHolder outputPathHolder,
         UpdateService updateService,
+        MetadataCacheService metadataCache,
         DownloadViewModel downloads,
         SettingsViewModel settings)
     {
         _ytDlpService = ytDlpService;
+        _ffmpegService = ffmpegService;
         _fileDialogService = fileDialogService;
         _outputPathHolder = outputPathHolder;
         _updateService = updateService;
+        _metadataCache = metadataCache;
         Downloads = downloads;
         Settings = settings;
 
@@ -50,12 +59,18 @@ public sealed class MainViewModel : ObservableObject
         ImportLinksCommand = new AsyncRelayCommand(ImportLinksFromTextFileAsync, () => !IsAnalyzing);
         QueueDownloadCommand = new AsyncRelayCommand(QueueCurrentDownloadAsync, () => !IsAnalyzing);
         ChooseFolderCommand = new AsyncRelayCommand(ChooseFolderAsync);
+        CheckYtDlpCommand = new AsyncRelayCommand(CheckYtDlpAsync);
+        UpdateYtDlpCommand = new AsyncRelayCommand(UpdateYtDlpAsync);
+        CheckFfmpegCommand = new AsyncRelayCommand(CheckFfmpegAsync);
+        OpenLogsFolderCommand = new RelayCommand(OpenLogsFolder);
+        ClearMetadataCacheCommand = new RelayCommand(ClearMetadataCache);
         ClearCommand = new RelayCommand(Clear);
         DismissUpdateCommand = new RelayCommand(() => UpdateMessage = null);
     }
 
     public IReadOnlyList<string> Formats { get; } = ["MP4", "MOV", "WebM", "MP3"];
     public IReadOnlyList<string> Resolutions { get; } = ["4K", "1440p", "1080p", "720p", "480p", "360p", "Original"];
+    public IReadOnlyList<string> MediaModes { get; } = ["Video + audio", "Only video", "Only audio"];
 
     public DownloadViewModel Downloads { get; }
     public SettingsViewModel Settings { get; }
@@ -66,6 +81,11 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ImportLinksCommand { get; }
     public AsyncRelayCommand QueueDownloadCommand { get; }
     public AsyncRelayCommand ChooseFolderCommand { get; }
+    public AsyncRelayCommand CheckYtDlpCommand { get; }
+    public AsyncRelayCommand UpdateYtDlpCommand { get; }
+    public AsyncRelayCommand CheckFfmpegCommand { get; }
+    public RelayCommand OpenLogsFolderCommand { get; }
+    public RelayCommand ClearMetadataCacheCommand { get; }
     public RelayCommand ClearCommand { get; }
     public RelayCommand DismissUpdateCommand { get; }
 
@@ -144,10 +164,50 @@ public sealed class MainViewModel : ObservableObject
         set => SetProperty(ref _detectedPlatform, value);
     }
 
+    public string SelectedMediaMode
+    {
+        get => _selectedMediaMode;
+        set
+        {
+            if (!SetProperty(ref _selectedMediaMode, value))
+            {
+                return;
+            }
+
+            if (IsAudioOnlyMode)
+            {
+                SelectedFormat = "MP3";
+                UseCustomTargetSize = false;
+            }
+            else if (SelectedFormat == "MP3")
+            {
+                SelectedFormat = "MP4";
+            }
+
+            OnPropertyChanged(nameof(IsAudioOnlyMode));
+            OnPropertyChanged(nameof(IsVideoOutputMode));
+            OnPropertyChanged(nameof(CanEditTargetSize));
+        }
+    }
+
+    public bool IsAudioOnlyMode => SelectedMediaMode == "Only audio";
+    public bool IsVideoOutputMode => !IsAudioOnlyMode;
+
     public string SelectedFormat
     {
         get => _selectedFormat;
-        set => SetProperty(ref _selectedFormat, value);
+        set
+        {
+            if (!SetProperty(ref _selectedFormat, value))
+            {
+                return;
+            }
+
+            if (SelectedFormat == "MP3" && !IsAudioOnlyMode)
+            {
+                SelectedMediaMode = "Only audio";
+            }
+        }
     }
 
     public string SelectedResolution
@@ -159,8 +219,16 @@ public sealed class MainViewModel : ObservableObject
     public bool UseCustomTargetSize
     {
         get => _useCustomTargetSize;
-        set => SetProperty(ref _useCustomTargetSize, value);
+        set
+        {
+            if (SetProperty(ref _useCustomTargetSize, IsAudioOnlyMode ? false : value))
+            {
+                OnPropertyChanged(nameof(CanEditTargetSize));
+            }
+        }
     }
+
+    public bool CanEditTargetSize => UseCustomTargetSize && IsVideoOutputMode;
 
     public double TargetSizeMegabytes
     {
@@ -198,10 +266,13 @@ public sealed class MainViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         await _outputPathHolder.SetAsync(SaveDirectory);
+        CrashLog.Info($"App data: {ClipConstants.AppDataDirectory}");
+        CrashLog.Info($"Logs: {ClipConstants.LogPath}");
+        CrashLog.Info($"OS: {Environment.OSVersion}; 64-bit process: {Environment.Is64BitProcess}");
         var missing = _ytDlpService.GetMissingBinaries(includeFfmpeg: true);
         if (missing.Count > 0)
         {
-            UpdateMessage = "Add yt-dlp.exe, ffmpeg.exe, and ffprobe.exe to Resources\\bin before downloading.";
+            UpdateMessage = string.Join(Environment.NewLine, missing);
             return;
         }
 
@@ -235,7 +306,7 @@ public sealed class MainViewModel : ObservableObject
             ClipRange.StartSeconds = 0;
             ClipRange.EndSeconds = ClipRange.DurationSeconds;
             SetThumbnail(metadata.BestThumbnail);
-            Feedback = "Ready to download.";
+            Feedback = metadata.IsFromCache ? "Ready to download. Data loaded from metadata cache." : "Ready to download.";
         }
         catch (MissingBinaryException ex)
         {
@@ -340,6 +411,57 @@ public sealed class MainViewModel : ObservableObject
         {
             SaveDirectory = folder;
         }
+    }
+
+    public async Task CheckYtDlpAsync()
+    {
+        UpdateMessage = await _updateService.CheckForYtDlpUpdateAsync(_shutdown.Token)
+            ?? "yt-dlp is present and up to date.";
+    }
+
+    public async Task UpdateYtDlpAsync()
+    {
+        var progress = new Progress<string>(message =>
+        {
+            Feedback = message;
+            UpdateMessage = message;
+        });
+        var result = await _updateService.UpdateYtDlpAsync(progress, _shutdown.Token);
+        UpdateMessage = result.Message;
+        Feedback = result.Success ? "yt-dlp update completed." : "yt-dlp update failed.";
+    }
+
+    public async Task CheckFfmpegAsync()
+    {
+        try
+        {
+            var detection = await _ffmpegService.DetectEncodersAsync(_shutdown.Token);
+            var encoder = detection.RecommendedEncoder.ToString();
+            UpdateMessage = string.IsNullOrWhiteSpace(detection.Warning)
+                ? $"ffmpeg is present. Recommended encoder: {encoder}."
+                : detection.Warning;
+        }
+        catch (Exception ex)
+        {
+            UpdateMessage = ex.Message;
+        }
+    }
+
+    public void OpenLogsFolder()
+    {
+        Directory.CreateDirectory(ClipConstants.LogDirectory);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = OperatingSystem.IsMacOS() ? "open" : "explorer.exe",
+            ArgumentList = { ClipConstants.LogDirectory },
+            UseShellExecute = false
+        });
+    }
+
+    public void ClearMetadataCache()
+    {
+        _metadataCache.Clear();
+        Feedback = "Metadata cache cleared.";
     }
 
     public async Task AcceptDetectedClipboardUrlAsync(string url)
@@ -457,6 +579,12 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        if (Settings.FastBatchTextImport && links.Count > 1)
+        {
+            // TODO: Route same-settings imports through YtDlpCommandBuilder.BuildBatchDownload once the UI has a batch item surface.
+            CrashLog.Info("Fast TXT batch import requested; queueing individual items until batch queue UI is available.");
+        }
+
         foreach (var link in links)
         {
             await Downloads.EnqueueAsync(CreateDownloadItem(link));
@@ -473,6 +601,7 @@ public sealed class MainViewModel : ObservableObject
             Metadata = metadata,
             Title = metadata?.DisplayTitle ?? "Queued link",
             Platform = metadata is null ? URLDetector.DetectPlatform(url) : DetectedPlatform,
+            MediaMode = SelectedMediaMode,
             Format = SelectedFormat,
             Resolution = SelectedResolution,
             UseCustomTargetSize = UseCustomTargetSize,

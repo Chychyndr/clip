@@ -29,7 +29,7 @@
                     <views:FormatPicker />
                     <views:ClipRangeView />
                     <views:SaveLocationView />
-                    <views:Settings DataContext="{Binding Settings}" />
+                    <views:Settings />
                 </StackPanel>
             </ScrollViewer>
 

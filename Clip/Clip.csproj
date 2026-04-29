@@ -22,9 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Resources\bin\yt-dlp.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\yt-dlp.exe')" />
-    <Content Include="Resources\bin\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\ffmpeg.exe')" />
-    <Content Include="Resources\bin\ffprobe.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin\ffprobe.exe')" />
+    <ProjectReference Include="..\Clip.Core\Clip.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\bin\**\*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin')" />
     <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Clip.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

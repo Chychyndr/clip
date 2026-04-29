@@ -7,9 +7,15 @@ public sealed class DownloadItem : ObservableEntity
     private string _title = "Queued download";
     private string _url = "";
     private Platform _platform = Platform.Unknown;
-    private DownloadStatus _status = DownloadStatus.Queued;
+    private DownloadStatus _status = DownloadStatus.Pending;
     private double _progress;
     private string _statusText = "Queued";
+    private string? _speed;
+    private string? _eta;
+    private string _currentStage = "Pending";
+    private string? _thumbnail;
+    private double? _durationSeconds;
+    private string _mediaMode = "Video + audio";
     private string _format = "MP4";
     private string _resolution = "1080p";
     private bool _useCustomTargetSize;
@@ -88,6 +94,42 @@ public sealed class DownloadItem : ObservableEntity
         set => SetProperty(ref _statusText, value);
     }
 
+    public string? Speed
+    {
+        get => _speed;
+        set => SetProperty(ref _speed, value);
+    }
+
+    public string? Eta
+    {
+        get => _eta;
+        set => SetProperty(ref _eta, value);
+    }
+
+    public string CurrentStage
+    {
+        get => _currentStage;
+        set => SetProperty(ref _currentStage, string.IsNullOrWhiteSpace(value) ? "Working" : value);
+    }
+
+    public string? Thumbnail
+    {
+        get => _thumbnail;
+        set => SetProperty(ref _thumbnail, value);
+    }
+
+    public double? DurationSeconds
+    {
+        get => _durationSeconds;
+        set => SetProperty(ref _durationSeconds, value);
+    }
+
+    public string MediaMode
+    {
+        get => _mediaMode;
+        set => SetProperty(ref _mediaMode, string.IsNullOrWhiteSpace(value) ? "Video + audio" : value);
+    }
+
     public string Format
     {
         get => _format;
@@ -143,7 +185,7 @@ public sealed class DownloadItem : ObservableEntity
     }
 
     public bool IsActive =>
-        Status is DownloadStatus.Analyzing or DownloadStatus.Downloading or DownloadStatus.Converting or DownloadStatus.Compressing;
+        Status is DownloadStatus.Analyzing or DownloadStatus.Downloading or DownloadStatus.PostProcessing;
 
     public bool IsTerminal =>
         Status is DownloadStatus.Completed or DownloadStatus.Failed or DownloadStatus.Cancelled;

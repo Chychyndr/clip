@@ -37,6 +37,9 @@ public sealed class VideoMetadata
     [JsonPropertyName("formats")]
     public List<FormatOption>? Formats { get; set; }
 
+    [JsonIgnore]
+    public bool IsFromCache { get; set; }
+
     public string Author => FirstNonEmpty(Channel, Uploader, "Unknown creator");
     public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "Untitled video" : Title;
     public string DurationLabel => DurationSeconds is > 0 ? ClipRange.FormatTime(DurationSeconds.Value) : "Unknown";

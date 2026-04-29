@@ -64,4 +64,5 @@ public sealed record DownloadHistoryEntry(
     string Format,
     string Resolution,
     string FilePath,
-    DateTimeOffset CompletedAt);
+    DateTimeOffset CompletedAt,
+    DownloadStatus Status = DownloadStatus.Completed);

@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clip", "Clip\Clip.csproj", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClipInstaller", "ClipInstaller\ClipInstaller.csproj", "{0F3E25A5-55F6-4F06-8E3F-F5683787D997}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clip.Core", "Clip.Core\Clip.Core.csproj", "{1DF8FCD4-62CF-4B46-8622-1F9E7F321715}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clip.Tests", "Clip.Tests\Clip.Tests.csproj", "{4D43F3C4-4357-49B8-A10E-956A057870AA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -20,6 +24,14 @@ Global
 		{0F3E25A5-55F6-4F06-8E3F-F5683787D997}.Debug|x64.Build.0 = Debug|Any CPU
 		{0F3E25A5-55F6-4F06-8E3F-F5683787D997}.Release|x64.ActiveCfg = Release|Any CPU
 		{0F3E25A5-55F6-4F06-8E3F-F5683787D997}.Release|x64.Build.0 = Release|Any CPU
+		{1DF8FCD4-62CF-4B46-8622-1F9E7F321715}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1DF8FCD4-62CF-4B46-8622-1F9E7F321715}.Debug|x64.Build.0 = Debug|Any CPU
+		{1DF8FCD4-62CF-4B46-8622-1F9E7F321715}.Release|x64.ActiveCfg = Release|Any CPU
+		{1DF8FCD4-62CF-4B46-8622-1F9E7F321715}.Release|x64.Build.0 = Release|Any CPU
+		{4D43F3C4-4357-49B8-A10E-956A057870AA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4D43F3C4-4357-49B8-A10E-956A057870AA}.Debug|x64.Build.0 = Debug|Any CPU
+		{4D43F3C4-4357-49B8-A10E-956A057870AA}.Release|x64.ActiveCfg = Release|Any CPU
+		{4D43F3C4-4357-49B8-A10E-956A057870AA}.Release|x64.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

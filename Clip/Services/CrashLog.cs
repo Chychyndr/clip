@@ -6,7 +6,7 @@ public static class CrashLog
 {
     private static readonly object Gate = new();
 
-    public static string Path => System.IO.Path.Combine(ClipConstants.AppDataDirectory, "crash.log");
+    public static string Path => ClipConstants.LogPath;
 
     public static void Info(string message) => Write("INFO", message);
 
