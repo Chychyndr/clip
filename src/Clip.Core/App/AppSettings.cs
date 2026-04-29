@@ -3,7 +3,7 @@ namespace Clip.Core.App;
 public sealed class AppSettings
 {
     public bool MonitorClipboard { get; set; } = true;
-    public bool AutoAnalyzeClipboard { get; set; }
+    public bool AutoAnalyzeClipboard { get; set; } = true;
     public bool HideToTrayOnClose { get; set; } = true;
     public bool StartMinimized { get; set; }
     public bool CheckForYtDlpUpdates { get; set; } = true;

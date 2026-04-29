@@ -1,0 +1,7 @@
+using Clip.Core.Platform;
+
+namespace Clip.Platform.MacOS;
+
+public sealed class MacOSClipboardMonitor : NullClipboardMonitor
+{
+}

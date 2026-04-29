@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Clip.Core\Clip.Core.csproj" />
+    <ProjectReference Include="..\src\Clip.Core\Clip.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

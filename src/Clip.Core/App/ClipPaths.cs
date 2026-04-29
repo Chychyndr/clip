@@ -26,14 +26,14 @@ public static class ClipPaths
                 AppName);
         }
 
-        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        if (!string.IsNullOrWhiteSpace(roaming))
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (!string.IsNullOrWhiteSpace(local))
         {
-            return Path.Combine(roaming, AppName);
+            return Path.Combine(local, AppName);
         }
 
         return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             AppName);
     }
 

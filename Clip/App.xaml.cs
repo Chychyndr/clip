@@ -67,7 +67,7 @@ public partial class App : Application
             var settings = SettingsViewModel.Load();
             var encoderDetector = new FfmpegEncoderDetector(processRunner, toolResolver);
             var ytDlpService = new YTDLPService(processRunner, redditResolver, toolResolver, metadataCache, settings);
-            var ffmpegService = new FFmpegService(processRunner, toolResolver, settings, encoderDetector);
+            var ffmpegService = new Services.FFmpegService(processRunner, toolResolver, settings, encoderDetector);
             var updateService = new UpdateService(processRunner, toolResolver, metadataCache);
             var history = DownloadHistory.Load(ClipConstants.HistoryPath);
             var downloads = new DownloadViewModel(ytDlpService, ffmpegService, history, settings, dispatcherQueue);

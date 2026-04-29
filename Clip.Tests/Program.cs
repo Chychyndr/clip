@@ -129,14 +129,14 @@ static Task TestToolResolver()
     Assert(winResolved.IsFound && winResolved.Path == winTool, "Expected win-x64 bundled yt-dlp.");
 
     var macBase = CreateTempDirectory();
-    var macDirectory = Path.Combine(macBase, "Resources", "bin", "osx-arm64");
+    var macDirectory = Path.Combine(macBase, "Resources", "bin", "macos-arm64");
     Directory.CreateDirectory(macDirectory);
     var macTool = Path.Combine(macDirectory, "ffmpeg");
     File.WriteAllText(macTool, "");
 
     var macResolver = new ToolResolver(macBase, new HostPlatform(HostOperatingSystem.MacOS, HostArchitecture.Arm64), "");
     var macResolved = macResolver.Resolve(ExternalTool.Ffmpeg, ensureExecutable: false);
-    Assert(macResolved.IsFound && macResolved.Path == macTool, "Expected osx-arm64 bundled ffmpeg.");
+    Assert(macResolved.IsFound && macResolved.Path == macTool, "Expected macos-arm64 bundled ffmpeg.");
 
     var pathDirectory = CreateTempDirectory();
     var pathTool = Path.Combine(pathDirectory, "ffprobe.exe");

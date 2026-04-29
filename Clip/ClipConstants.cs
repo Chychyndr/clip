@@ -10,7 +10,7 @@ public static class ClipConstants
     public const string IpcPipeName = "Clip.SecondInstancePipe";
 
     public static string AppBaseDirectory => AppContext.BaseDirectory;
-    public static string BinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin", HostPlatformDetector.Detect().RuntimeIdentifier);
+    public static string BinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin", HostPlatformDetector.Detect().ResourceFolderName);
     public static string LegacyBinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin");
     public static string YtDlpPath => new ToolResolver(AppBaseDirectory).Resolve(ExternalTool.YtDlp).Path
         ?? Path.Combine(BinDirectory, OperatingSystem.IsWindows() ? "yt-dlp.exe" : "yt-dlp");

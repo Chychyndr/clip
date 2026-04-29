@@ -12,6 +12,17 @@ public sealed record HostPlatform(HostOperatingSystem OperatingSystem, HostArchi
         _ => "unknown"
     };
 
+    public string ResourceFolderName => (OperatingSystem, Architecture) switch
+    {
+        (HostOperatingSystem.Windows, HostArchitecture.X64) => "win-x64",
+        (HostOperatingSystem.Windows, HostArchitecture.Arm64) => "win-arm64",
+        (HostOperatingSystem.MacOS, HostArchitecture.X64) => "macos-x64",
+        (HostOperatingSystem.MacOS, HostArchitecture.Arm64) => "macos-arm64",
+        (HostOperatingSystem.Linux, HostArchitecture.X64) => "linux-x64",
+        (HostOperatingSystem.Linux, HostArchitecture.Arm64) => "linux-arm64",
+        _ => "unknown"
+    };
+
     public bool IsWindows => OperatingSystem == HostOperatingSystem.Windows;
     public bool IsMacOS => OperatingSystem == HostOperatingSystem.MacOS;
 }

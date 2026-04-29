@@ -59,10 +59,10 @@ public sealed class ToolResolver
             _appBaseDirectory,
             "Resources",
             "bin",
-            _platform.RuntimeIdentifier,
+            _platform.ResourceFolderName,
             GetFileName(tool));
 
-        if (_platform.RuntimeIdentifier != "unknown")
+        if (_platform.ResourceFolderName != "unknown")
         {
             return firstPlatformPath;
         }
@@ -75,7 +75,13 @@ public sealed class ToolResolver
         var fileName = GetFileName(tool);
         var candidates = new List<string>();
 
-        if (_platform.RuntimeIdentifier != "unknown")
+        if (_platform.ResourceFolderName != "unknown")
+        {
+            candidates.Add(Path.Combine(_appBaseDirectory, "Resources", "bin", _platform.ResourceFolderName, fileName));
+        }
+
+        if (_platform.RuntimeIdentifier != "unknown" &&
+            !_platform.RuntimeIdentifier.Equals(_platform.ResourceFolderName, StringComparison.OrdinalIgnoreCase))
         {
             candidates.Add(Path.Combine(_appBaseDirectory, "Resources", "bin", _platform.RuntimeIdentifier, fileName));
         }

@@ -18,4 +18,14 @@ certs/
 !Clip/Resources/bin/README.md
 Clip/Resources/bin/*.exe
 Clip/Resources/bin/*.dll
+!resources/
+!resources/bin/
+!resources/bin/**/
+!resources/bin/**/.gitkeep
+resources/bin/**/*.exe
+resources/bin/**/*.dll
+resources/bin/**/yt-dlp
+resources/bin/**/ffmpeg
+resources/bin/**/ffprobe
+resources/bin/**/aria2c
 ClipInstaller/Resources/clip-payload.zip
