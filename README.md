@@ -43,9 +43,9 @@ Clip - cross-platform desktop downloader and media processing toolkit powered by
 
 ## Description
 
-> Clip downloads video and audio from supported links, analyzes metadata through `yt-dlp`, stores reusable metadata JSON, queues downloads, and runs `ffmpeg`/`ffprobe` for trim, muxing, compression, and media inspection. The project is being migrated from a Windows-only WinUI app to a cross-platform .NET architecture with Avalonia UI for Windows and macOS.
+> Clip downloads video and audio from supported links, analyzes metadata through `yt-dlp`, stores reusable metadata JSON, queues downloads, and runs `ffmpeg`/`ffprobe` for trim, muxing, compression, and media inspection. The default solution now targets the cross-platform .NET architecture with Avalonia UI for Windows and macOS.
 
-The existing WinUI project is still kept for Windows compatibility during the transition. The new cross-platform entry point is `src/Clip.App`.
+The legacy WinUI source is still kept under `Clip/` for reference while parity work continues, but it is no longer part of the default `Clip.sln` build. The cross-platform entry point is `src/Clip.App`.
 
 ## Features
 
@@ -58,6 +58,7 @@ The existing WinUI project is still kept for Windows compatibility during the tr
 * TXT import with empty-line filtering, duplicate removal, and basic URL validation.
 * Batch download command support through `yt-dlp -a links.txt` when settings are uniform.
 * `yt-dlp --concurrent-fragments` support.
+* Browser cookie source detection for Chrome, Edge, Brave, and Firefox on Windows and macOS.
 * Experimental `aria2c` mode prepared for HTTP downloads.
 * Safe argument passing through `ProcessStartInfo.ArgumentList`.
 
@@ -117,6 +118,8 @@ ffmpeg -ss START -to END -i input.mp4 -c copy output.mp4
 * `src/Clip.Core` contains shared application logic.
 * `src/Clip.Platform` contains Windows/macOS service implementations.
 * `src/Clip.App` contains the Avalonia desktop shell.
+* `Clip.sln` builds only cross-platform projects by default.
+* Legacy WinUI and installer projects remain in the repository but are excluded from the default solution.
 * Root `resources/bin` contains platform-specific tool folders.
 * GitHub Actions builds Windows and macOS zip artifacts.
 
@@ -231,6 +234,8 @@ Build the solution:
 dotnet build
 ```
 
+The default solution builds `Clip.Core`, `Clip.Platform`, `Clip.App`, and `Clip.Tests`. It does not build the legacy WinUI app or installer.
+
 Build only the cross-platform Avalonia app:
 
 ```bash
@@ -284,7 +289,7 @@ dotnet publish src/Clip.App/Clip.App.csproj -c Release -r osx-x64 --self-contain
 
 ## Windows Installer
 
-The existing installer script still targets the legacy WinUI project:
+The existing installer script still targets the legacy WinUI project and is intentionally outside the cross-platform solution:
 
 ```powershell
 .\scripts\build-installer.ps1
@@ -351,6 +356,7 @@ Downloads:      ~/Downloads/Clip
 
 * The Avalonia app is a staged migration shell, not yet a full one-to-one replacement for every WinUI interaction.
 * Native tray and continuous clipboard monitoring are currently interface-backed placeholders in the cross-platform path.
+* Browser cookie sources are detected and passed to `yt-dlp`, but browser-specific profile selection is still basic.
 * macOS `.app`, `.dmg`, signing, and notarization require manual validation on macOS.
 * External binaries are not committed to git.
 * Some sites require browser cookies or may be restricted by the source platform.
@@ -394,7 +400,7 @@ Clip-macos-x64.zip
 
 ## Licensing
 
-No `LICENSE` file is currently present in this repository. Add one before public binary distribution.
+The repository includes a `LICENSE` file. Verify third-party binary redistribution terms before bundling `yt-dlp`, `ffmpeg`, `ffprobe`, or `aria2c` in public releases.
 
 ## Creators
 

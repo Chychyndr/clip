@@ -19,6 +19,7 @@ public sealed class DownloadItem : ObservableEntity
     private string _format = "MP4";
     private string _resolution = "1080p";
     private string _saveDirectory = "";
+    private string? _browserCookieSource;
     private string? _outputFilePath;
     private string? _errorMessage;
     private VideoMetadata? _metadata;
@@ -142,6 +143,12 @@ public sealed class DownloadItem : ObservableEntity
     {
         get => _saveDirectory;
         set => SetProperty(ref _saveDirectory, value);
+    }
+
+    public string? BrowserCookieSource
+    {
+        get => _browserCookieSource;
+        set => SetProperty(ref _browserCookieSource, string.IsNullOrWhiteSpace(value) ? null : value);
     }
 
     public string? OutputFilePath

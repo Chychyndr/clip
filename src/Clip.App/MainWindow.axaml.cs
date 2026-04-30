@@ -45,6 +45,8 @@ public partial class MainWindow : Window
             settingsStore,
             new AvaloniaFileDialogService(this),
             PlatformServices.CreateClipboardMonitor(),
+            PlatformServices.CreateTrayService(),
+            PlatformServices.CreateBrowserCookieSourceDetector(),
             pathService,
             metadataCache,
             toolResolver,

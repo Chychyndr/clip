@@ -28,8 +28,16 @@ public static class PlatformServices
     }
 
     public static IClipboardMonitor CreateClipboardMonitor() =>
-        new NullClipboardMonitor();
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? new MacOSClipboardMonitor()
+            : RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? new WindowsClipboardMonitor()
+                : new NullClipboardMonitor();
 
     public static ITrayService CreateTrayService() =>
-        new NullTrayService();
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+            ? new MacOSTrayService()
+            : RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                ? new WindowsTrayService()
+                : new NullTrayService();
 }

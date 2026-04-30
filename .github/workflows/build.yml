@@ -32,10 +32,13 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore src/Clip.App/Clip.App.csproj --configfile NuGet.Config
+        run: dotnet restore --configfile NuGet.Config
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
 
       - name: Publish
-        run: dotnet publish src/Clip.App/Clip.App.csproj -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/${{ matrix.artifact }}
+        run: dotnet publish src/Clip.App/Clip.App.csproj --no-restore -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/${{ matrix.artifact }}
 
       - name: Zip artifact
         shell: pwsh

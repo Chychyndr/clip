@@ -16,11 +16,7 @@ public sealed class FFprobeService
 
     public async Task<double?> GetDurationSecondsAsync(string inputPath, CancellationToken cancellationToken = default)
     {
-        var ffprobe = _toolResolver.Resolve(ExternalTool.Ffprobe);
-        if (!ffprobe.IsFound || ffprobe.Path is null)
-        {
-            throw new FileNotFoundException("ffprobe was not found.", "ffprobe");
-        }
+        var ffprobe = ResolveRequired();
 
         var args = new[]
         {
@@ -33,10 +29,10 @@ public sealed class FFprobeService
             inputPath
         };
 
-        var result = await _processRunner.RunAsync(ffprobe.Path, args, cancellationToken: cancellationToken);
+        var result = await _processRunner.RunAsync(ffprobe.Path!, args, cancellationToken: cancellationToken);
         if (!result.IsSuccess)
         {
-            throw new InvalidOperationException("ffprobe failed to read media information.");
+            throw new InvalidOperationException(FirstErrorLine(result.StandardError, "ffprobe failed to read media information."));
         }
 
         using var document = JsonDocument.Parse(result.StandardOutput);
@@ -49,4 +45,24 @@ public sealed class FFprobeService
 
         return null;
     }
+
+    private ExternalToolResolution ResolveRequired()
+    {
+        var resolved = _toolResolver.Resolve(ExternalTool.Ffprobe);
+        if (!resolved.IsFound || resolved.Path is null)
+        {
+            throw new FileNotFoundException("ffprobe was not found.", "ffprobe");
+        }
+
+        if (!string.IsNullOrWhiteSpace(resolved.Message))
+        {
+            throw new InvalidOperationException(resolved.Message);
+        }
+
+        return resolved;
+    }
+
+    private static string FirstErrorLine(string text, string fallback) =>
+        text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault(line => !string.IsNullOrWhiteSpace(line)) ?? fallback;
 }

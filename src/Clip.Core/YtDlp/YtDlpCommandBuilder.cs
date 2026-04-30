@@ -46,7 +46,7 @@ public static class YtDlpCommandBuilder
             args.AddRange(
             [
                 "--downloader",
-                "aria2c",
+                options.Aria2cPath,
                 "--downloader-args",
                 "aria2c:-x 8 -s 8 -k 1M"
             ]);

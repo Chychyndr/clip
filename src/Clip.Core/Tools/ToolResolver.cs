@@ -20,6 +20,16 @@ public sealed class ToolResolver
 
     public HostPlatform Platform => _platform;
 
+    public static string GetRuntimeFolder() => HostPlatformDetector.Detect().ResourceFolderName;
+
+    public static string GetExecutableName(string toolName)
+    {
+        var platform = HostPlatformDetector.Detect();
+        return platform.IsWindows && !toolName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? $"{toolName}.exe"
+            : toolName;
+    }
+
     public ExternalToolResolution Resolve(ExternalTool tool, bool ensureExecutable = true)
     {
         var displayName = GetDisplayName(tool);

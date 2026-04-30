@@ -40,6 +40,12 @@
                 <TextBox Text="{Binding SaveDirectory}" IsReadOnly="True" />
                 <Button Grid.Column="1" Content="Choose folder" Command="{Binding PickFolderCommand}" />
               </Grid>
+
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <ComboBox ItemsSource="{Binding CookieSources}"
+                          SelectedItem="{Binding SelectedCookieSource}" />
+                <Button Grid.Column="1" Content="Refresh cookies" Command="{Binding RefreshCookieSourcesCommand}" />
+              </Grid>
             </StackPanel>
           </Border>
 
@@ -123,6 +129,7 @@
               <Button Content="Check yt-dlp" Command="{Binding CheckYtDlpCommand}" />
               <Button Content="Update yt-dlp" Command="{Binding UpdateYtDlpCommand}" />
               <Button Content="Check ffmpeg" Command="{Binding CheckFfmpegCommand}" />
+              <Button Content="Check ffprobe" Command="{Binding CheckFfprobeCommand}" />
               <Button Content="Clear metadata cache" Command="{Binding ClearMetadataCacheCommand}" />
               <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" />
             </StackPanel>

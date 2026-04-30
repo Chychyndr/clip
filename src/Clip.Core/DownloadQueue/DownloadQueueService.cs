@@ -32,7 +32,13 @@ public sealed class DownloadQueueService
 
     public ObservableCollection<DownloadItem> Items { get; } = [];
 
-    public DownloadItem Enqueue(string url, string saveDirectory, string mediaMode, string format, string resolution)
+    public DownloadItem Enqueue(
+        string url,
+        string saveDirectory,
+        string mediaMode,
+        string format,
+        string resolution,
+        string? browserCookieSource = null)
     {
         var item = new DownloadItem
         {
@@ -41,6 +47,7 @@ public sealed class DownloadQueueService
             MediaMode = mediaMode,
             Format = format,
             Resolution = resolution,
+            BrowserCookieSource = browserCookieSource,
             Platform = UrlDetector.DetectPlatform(url),
             Cancellation = new CancellationTokenSource()
         };
@@ -57,7 +64,7 @@ public sealed class DownloadQueueService
         await _queueService.AnalyzeAsync(async token =>
         {
             using var linked = CreateLinkedToken(item, token, cancellationToken);
-            var result = await _ytDlpService.AnalyzeAsync(item.Url, cancellationToken: linked.Token);
+            var result = await _ytDlpService.AnalyzeAsync(item.Url, item.BrowserCookieSource, linked.Token);
             item.Metadata = result.Metadata;
             item.Title = result.Metadata.DisplayTitle;
             item.Thumbnail = result.Metadata.BestThumbnail;
@@ -87,7 +94,8 @@ public sealed class DownloadQueueService
                         SaveDirectory = item.SaveDirectory,
                         MediaMode = item.MediaMode,
                         Format = item.Format,
-                        Resolution = item.Resolution
+                        Resolution = item.Resolution,
+                        BrowserCookieSource = item.BrowserCookieSource
                     },
                     progress =>
                     {

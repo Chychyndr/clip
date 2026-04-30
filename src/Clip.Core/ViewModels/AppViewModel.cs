@@ -18,6 +18,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     private readonly SettingsStore _settingsStore;
     private readonly IFileDialogService _fileDialogService;
     private readonly IClipboardMonitor _clipboardMonitor;
+    private readonly ITrayService _trayService;
+    private readonly IBrowserCookieSourceDetector _browserCookieSourceDetector;
     private readonly IAppPathService _pathService;
     private readonly MetadataCacheService _metadataCacheService;
     private readonly ToolResolver _toolResolver;
@@ -28,8 +30,11 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     private string _selectedMediaMode = "Video + audio";
     private string _selectedFormat = "MP4";
     private string _selectedResolution = "1080p";
+    private string _selectedCookieSource = NoCookieSource;
     private string _saveDirectory;
     private bool _isBusy;
+
+    private const string NoCookieSource = "None";
 
     public AppViewModel(
         DownloadQueueService queueService,
@@ -37,6 +42,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         SettingsStore settingsStore,
         IFileDialogService fileDialogService,
         IClipboardMonitor clipboardMonitor,
+        ITrayService trayService,
+        IBrowserCookieSourceDetector browserCookieSourceDetector,
         IAppPathService pathService,
         MetadataCacheService metadataCacheService,
         ToolResolver toolResolver,
@@ -47,6 +54,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         _settingsStore = settingsStore;
         _fileDialogService = fileDialogService;
         _clipboardMonitor = clipboardMonitor;
+        _trayService = trayService;
+        _browserCookieSourceDetector = browserCookieSourceDetector;
         _pathService = pathService;
         _metadataCacheService = metadataCacheService;
         _toolResolver = toolResolver;
@@ -58,9 +67,11 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         ImportTextFileCommand = new AsyncRelayCommand(ImportTextFileAsync);
         PickFolderCommand = new AsyncRelayCommand(PickFolderAsync);
         SaveSettingsCommand = new AsyncRelayCommand(SaveSettingsAsync);
+        RefreshCookieSourcesCommand = new RelayCommand(RefreshCookieSources);
         ClearMetadataCacheCommand = new RelayCommand(ClearMetadataCache);
         CheckYtDlpCommand = new AsyncRelayCommand(() => CheckToolAsync(ExternalTool.YtDlp));
         CheckFfmpegCommand = new AsyncRelayCommand(() => CheckToolAsync(ExternalTool.Ffmpeg));
+        CheckFfprobeCommand = new AsyncRelayCommand(() => CheckToolAsync(ExternalTool.Ffprobe));
         UpdateYtDlpCommand = new AsyncRelayCommand(UpdateYtDlpAsync);
         CancelItemCommand = new RelayCommand(parameter =>
         {
@@ -72,6 +83,10 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
 
         _clipboardMonitor.SupportedUrlDetected += OnSupportedUrlDetected;
         _clipboardMonitor.IsEnabled = Settings.MonitorClipboard;
+        _selectedCookieSource = string.IsNullOrWhiteSpace(Settings.BrowserCookieSource)
+            ? NoCookieSource
+            : Settings.BrowserCookieSource;
+        RefreshCookieSources();
     }
 
     public AppSettings Settings => _settingsStore.Current;
@@ -87,6 +102,7 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     public IReadOnlyList<TrimMode> TrimModes { get; } = [TrimMode.Fast, TrimMode.Exact];
     public IReadOnlyList<CompressionMode> CompressionModes { get; } = [CompressionMode.Fast, CompressionMode.Balance, CompressionMode.Quality];
     public IReadOnlyList<VideoEncoderChoice> EncoderChoices { get; } = Enum.GetValues<VideoEncoderChoice>();
+    public ObservableCollection<string> CookieSources { get; } = [];
 
     public string Url
     {
@@ -128,6 +144,18 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         set => SetProperty(ref _selectedResolution, value);
     }
 
+    public string SelectedCookieSource
+    {
+        get => _selectedCookieSource;
+        set
+        {
+            if (SetProperty(ref _selectedCookieSource, string.IsNullOrWhiteSpace(value) ? NoCookieSource : value))
+            {
+                Settings.BrowserCookieSource = CurrentCookieSource;
+            }
+        }
+    }
+
     public string SaveDirectory
     {
         get => _saveDirectory;
@@ -137,7 +165,13 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     public bool IsBusy
     {
         get => _isBusy;
-        set => SetProperty(ref _isBusy, value);
+        set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                _trayService.SetBusy(value);
+            }
+        }
     }
 
     public AsyncRelayCommand AnalyzeCommand { get; }
@@ -145,13 +179,18 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     public AsyncRelayCommand ImportTextFileCommand { get; }
     public AsyncRelayCommand PickFolderCommand { get; }
     public AsyncRelayCommand SaveSettingsCommand { get; }
+    public RelayCommand RefreshCookieSourcesCommand { get; }
     public RelayCommand ClearMetadataCacheCommand { get; }
     public AsyncRelayCommand CheckYtDlpCommand { get; }
     public AsyncRelayCommand CheckFfmpegCommand { get; }
+    public AsyncRelayCommand CheckFfprobeCommand { get; }
     public AsyncRelayCommand UpdateYtDlpCommand { get; }
     public RelayCommand CancelItemCommand { get; }
 
     public string LogsDirectory => _pathService.LogsDirectory;
+    private string? CurrentCookieSource => SelectedCookieSource.Equals(NoCookieSource, StringComparison.OrdinalIgnoreCase)
+        ? null
+        : SelectedCookieSource;
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -173,7 +212,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         try
         {
             var item = Downloads.FirstOrDefault(download => string.Equals(download.Url, normalized, StringComparison.OrdinalIgnoreCase))
-                ?? _queueService.Enqueue(normalized, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution);
+                ?? _queueService.Enqueue(normalized, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource);
+            item.BrowserCookieSource = CurrentCookieSource;
             await _queueService.AnalyzeAsync(item);
             StatusMessage = item.Metadata?.IsFromCache == true ? "Metadata loaded from cache." : "Metadata analyzed.";
         }
@@ -196,7 +236,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         }
 
         var item = Downloads.FirstOrDefault(download => string.Equals(download.Url, normalized, StringComparison.OrdinalIgnoreCase))
-            ?? _queueService.Enqueue(normalized, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution);
+            ?? _queueService.Enqueue(normalized, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource);
+        item.BrowserCookieSource = CurrentCookieSource;
         _ = Task.Run(() => _queueService.DownloadAsync(item));
         StatusMessage = "Download queued.";
         await Task.CompletedTask;
@@ -216,7 +257,7 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
             var urls = UrlDetector.ExtractDistinctUrls(lines);
             foreach (var url in urls)
             {
-                _queueService.Enqueue(url, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution);
+                _queueService.Enqueue(url, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource);
             }
 
             StatusMessage = $"Imported {urls.Count} URL(s).";
@@ -238,7 +279,11 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
 
     private async Task SaveSettingsAsync()
     {
+        Settings.BrowserCookieSource = CurrentCookieSource;
         Settings.Normalize();
+        SelectedCookieSource = string.IsNullOrWhiteSpace(Settings.BrowserCookieSource)
+            ? NoCookieSource
+            : Settings.BrowserCookieSource;
         await _settingsStore.SaveAsync();
         _queueService.ApplySettings();
         _clipboardMonitor.IsEnabled = Settings.MonitorClipboard;
@@ -249,6 +294,36 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     {
         _metadataCacheService.Clear();
         StatusMessage = "Metadata cache cleared.";
+    }
+
+    private void RefreshCookieSources()
+    {
+        var selected = SelectedCookieSource;
+        CookieSources.Clear();
+        CookieSources.Add(NoCookieSource);
+
+        try
+        {
+            foreach (var source in _browserCookieSourceDetector.Detect().Where(source => !string.IsNullOrWhiteSpace(source)))
+            {
+                if (!CookieSources.Contains(source, StringComparer.OrdinalIgnoreCase))
+                {
+                    CookieSources.Add(source);
+                }
+            }
+
+            StatusMessage = CookieSources.Count > 1
+                ? $"Detected {CookieSources.Count - 1} browser cookie source(s)."
+                : "No browser cookie sources detected.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Unable to detect browser cookie sources: {ex.Message}";
+        }
+
+        SelectedCookieSource = CookieSources.Contains(selected, StringComparer.OrdinalIgnoreCase)
+            ? selected
+            : NoCookieSource;
     }
 
     private async Task CheckToolAsync(ExternalTool tool)
@@ -313,5 +388,6 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         _autoAnalyzeDelay?.Cancel();
         _clipboardMonitor.SupportedUrlDetected -= OnSupportedUrlDetected;
         _clipboardMonitor.Dispose();
+        _trayService.Dispose();
     }
 }
