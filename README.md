@@ -293,7 +293,7 @@ The existing installer script still targets the legacy WinUI project:
 Output:
 
 ```text
-artifacts\ClipSetup.exe
+artifacts\installer\ClipSetup.exe
 ```
 
 If publishing fails because `yt-dlp.exe` is locked, close running Clip instances and retry. The publish scripts also fall back to a timestamped output folder when the previous artifact directory cannot be removed.
