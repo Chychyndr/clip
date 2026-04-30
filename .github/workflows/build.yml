@@ -1,0 +1,51 @@
+name: Build Clip
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            runtime: win-x64
+            artifact: Clip-win-x64
+          - os: macos-latest
+            runtime: osx-arm64
+            artifact: Clip-macos-arm64
+          - os: macos-latest
+            runtime: osx-x64
+            artifact: Clip-macos-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore --configfile NuGet.Config
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Publish
+        run: dotnet publish src/Clip.App/Clip.App.csproj --no-restore -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/${{ matrix.artifact }}
+
+      - name: Zip artifact
+        shell: pwsh
+        run: Compress-Archive -Path "artifacts/${{ matrix.artifact }}/*" -DestinationPath "artifacts/${{ matrix.artifact }}.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.artifact }}.zip

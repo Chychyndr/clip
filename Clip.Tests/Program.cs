@@ -1,5 +1,7 @@
 using Clip.Core.Cache;
+using Clip.Core.App;
 using Clip.Core.Files;
+using Clip.Core.Ffmpeg;
 using Clip.Core.Queue;
 using Clip.Core.Tools;
 using Clip.Core.YtDlp;
@@ -10,7 +12,10 @@ var tests = new (string Name, Func<Task> Test)[]
     ("YtDlpProgressParser parses stable progress and ignores unknown lines", TestProgressParser),
     ("FilenameSanitizer cleans invalid names and preserves extensions", TestFilenameSanitizer),
     ("QueueService respects download and ffmpeg concurrency and cancellation", TestQueueServiceAsync),
-    ("ToolResolver selects platform binaries and falls back to PATH", TestToolResolver)
+    ("ToolResolver selects platform binaries and falls back to PATH", TestToolResolver),
+    ("YtDlpCommandBuilder uses explicit aria2c path and cookies", TestYtDlpCommandBuilder),
+    ("FfmpegCommandBuilder uses stream copy for fast trim", TestFfmpegFastTrim),
+    ("AppSettings normalizes concurrency and cookies", TestAppSettingsNormalize)
 };
 
 var failed = 0;
@@ -129,14 +134,14 @@ static Task TestToolResolver()
     Assert(winResolved.IsFound && winResolved.Path == winTool, "Expected win-x64 bundled yt-dlp.");
 
     var macBase = CreateTempDirectory();
-    var macDirectory = Path.Combine(macBase, "Resources", "bin", "osx-arm64");
+    var macDirectory = Path.Combine(macBase, "Resources", "bin", "macos-arm64");
     Directory.CreateDirectory(macDirectory);
     var macTool = Path.Combine(macDirectory, "ffmpeg");
     File.WriteAllText(macTool, "");
 
     var macResolver = new ToolResolver(macBase, new HostPlatform(HostOperatingSystem.MacOS, HostArchitecture.Arm64), "");
     var macResolved = macResolver.Resolve(ExternalTool.Ffmpeg, ensureExecutable: false);
-    Assert(macResolved.IsFound && macResolved.Path == macTool, "Expected osx-arm64 bundled ffmpeg.");
+    Assert(macResolved.IsFound && macResolved.Path == macTool, "Expected macos-arm64 bundled ffmpeg.");
 
     var pathDirectory = CreateTempDirectory();
     var pathTool = Path.Combine(pathDirectory, "ffprobe.exe");
@@ -144,6 +149,64 @@ static Task TestToolResolver()
     var pathResolver = new ToolResolver(CreateTempDirectory(), new HostPlatform(HostOperatingSystem.Windows, HostArchitecture.X64), pathDirectory);
     var pathResolved = pathResolver.Resolve(ExternalTool.Ffprobe, ensureExecutable: false);
     Assert(pathResolved.IsFound && pathResolved.IsFromPath && pathResolved.Path == pathTool, "Expected PATH fallback.");
+    return Task.CompletedTask;
+}
+
+static Task TestYtDlpCommandBuilder()
+{
+    var args = YtDlpCommandBuilder.BuildDownload(new YtDlpDownloadOptions
+    {
+        Url = "https://example.com/video",
+        SaveDirectory = "C:\\Downloads With Spaces",
+        MediaMode = "Video + audio",
+        Format = "MP4",
+        Resolution = "1080p",
+        ConcurrentFragments = 4,
+        UseAria2c = true,
+        Aria2cPath = "C:\\Tools\\aria2c.exe",
+        BrowserCookieSource = "chrome"
+    }).ToArray();
+
+    Assert(args.Contains("--concurrent-fragments"), "Expected yt-dlp concurrent fragments option.");
+    Assert(args.Contains("4"), "Expected fragment count.");
+    Assert(HasAdjacent(args, "--downloader", "C:\\Tools\\aria2c.exe"), "Expected bundled aria2c path to be passed.");
+    Assert(HasAdjacent(args, "--cookies-from-browser", "chrome"), "Expected browser cookie source.");
+    return Task.CompletedTask;
+}
+
+static Task TestFfmpegFastTrim()
+{
+    var args = FfmpegCommandBuilder.BuildFastTrim(new FfmpegTrimOptions
+    {
+        InputPath = "input file.mp4",
+        OutputPath = "output file.mp4",
+        StartSeconds = 1.5,
+        EndSeconds = 3.25
+    }).ToArray();
+
+    Assert(HasAdjacent(args, "-c", "copy"), "Fast trim should use stream copy.");
+    Assert(!args.Contains("-preset"), "Fast trim should not re-encode.");
+    return Task.CompletedTask;
+}
+
+static Task TestAppSettingsNormalize()
+{
+    var settings = new AppSettings
+    {
+        MaxConcurrentDownloads = 99,
+        MaxConcurrentMetadataAnalysis = 99,
+        MaxConcurrentFfmpegJobs = 3,
+        YtDlpConcurrentFragments = 99,
+        BrowserCookieSource = " None "
+    };
+
+    settings.Normalize();
+
+    Assert(settings.MaxConcurrentDownloads == 2, "Invalid download concurrency should reset.");
+    Assert(settings.MaxConcurrentMetadataAnalysis == 3, "Invalid metadata concurrency should reset.");
+    Assert(settings.MaxConcurrentFfmpegJobs == 1, "ffmpeg concurrency should remain serialized.");
+    Assert(settings.YtDlpConcurrentFragments == 4, "Invalid fragment count should reset.");
+    Assert(settings.BrowserCookieSource is null, "None cookie source should normalize to null.");
     return Task.CompletedTask;
 }
 
@@ -160,6 +223,19 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+static bool HasAdjacent(IReadOnlyList<string> values, string left, string right)
+{
+    for (var index = 0; index < values.Count - 1; index++)
+    {
+        if (values[index] == left && values[index + 1] == right)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 sealed class ManualTimeProvider : TimeProvider

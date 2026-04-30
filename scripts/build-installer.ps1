@@ -86,7 +86,9 @@ $installerProject = Join-Path $root "ClipInstaller\ClipInstaller.csproj"
 $payloadDirectory = Join-Path $root "ClipInstaller\Resources"
 $payload = Join-Path $payloadDirectory "clip-payload.zip"
 $installerOutput = Join-Path $root "artifacts\installer"
-$setupPath = Join-Path $root "artifacts\ClipSetup.exe"
+$publishedInstallerPath = Join-Path $installerOutput "ClipInstaller.exe"
+$setupPath = Join-Path $installerOutput "ClipSetup.exe"
+$legacySetupPath = Join-Path $root "artifacts\ClipSetup.exe"
 
 & $publishScript -Configuration $Configuration -Runtime $Runtime
 if ($LASTEXITCODE -ne 0) {
@@ -103,6 +105,10 @@ Compress-Archive -Path (Join-Path $appOutput "*") -DestinationPath $payload -For
 
 if (Test-Path $installerOutput) {
     Remove-Item -LiteralPath $installerOutput -Recurse -Force
+}
+
+if (Test-Path $legacySetupPath) {
+    Remove-Item -LiteralPath $legacySetupPath -Force
 }
 
 dotnet restore $installerProject -r $Runtime
@@ -125,7 +131,11 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Copy-Item -LiteralPath (Join-Path $installerOutput "ClipInstaller.exe") -Destination $setupPath -Force
+if (Test-Path $setupPath) {
+    Remove-Item -LiteralPath $setupPath -Force
+}
+
+Move-Item -LiteralPath $publishedInstallerPath -Destination $setupPath -Force
 Invoke-CodeSign -Path $setupPath
 Remove-Item -LiteralPath $payload -Force -ErrorAction SilentlyContinue
 Write-Host "Created $setupPath"

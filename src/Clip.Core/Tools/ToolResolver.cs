@@ -20,6 +20,16 @@ public sealed class ToolResolver
 
     public HostPlatform Platform => _platform;
 
+    public static string GetRuntimeFolder() => HostPlatformDetector.Detect().ResourceFolderName;
+
+    public static string GetExecutableName(string toolName)
+    {
+        var platform = HostPlatformDetector.Detect();
+        return platform.IsWindows && !toolName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? $"{toolName}.exe"
+            : toolName;
+    }
+
     public ExternalToolResolution Resolve(ExternalTool tool, bool ensureExecutable = true)
     {
         var displayName = GetDisplayName(tool);
@@ -59,10 +69,10 @@ public sealed class ToolResolver
             _appBaseDirectory,
             "Resources",
             "bin",
-            _platform.RuntimeIdentifier,
+            _platform.ResourceFolderName,
             GetFileName(tool));
 
-        if (_platform.RuntimeIdentifier != "unknown")
+        if (_platform.ResourceFolderName != "unknown")
         {
             return firstPlatformPath;
         }
@@ -75,7 +85,13 @@ public sealed class ToolResolver
         var fileName = GetFileName(tool);
         var candidates = new List<string>();
 
-        if (_platform.RuntimeIdentifier != "unknown")
+        if (_platform.ResourceFolderName != "unknown")
+        {
+            candidates.Add(Path.Combine(_appBaseDirectory, "Resources", "bin", _platform.ResourceFolderName, fileName));
+        }
+
+        if (_platform.RuntimeIdentifier != "unknown" &&
+            !_platform.RuntimeIdentifier.Equals(_platform.ResourceFolderName, StringComparison.OrdinalIgnoreCase))
         {
             candidates.Add(Path.Combine(_appBaseDirectory, "Resources", "bin", _platform.RuntimeIdentifier, fileName));
         }

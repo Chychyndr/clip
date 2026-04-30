@@ -3,7 +3,7 @@ namespace Clip.Core.App;
 public sealed class AppSettings
 {
     public bool MonitorClipboard { get; set; } = true;
-    public bool AutoAnalyzeClipboard { get; set; }
+    public bool AutoAnalyzeClipboard { get; set; } = true;
     public bool HideToTrayOnClose { get; set; } = true;
     public bool StartMinimized { get; set; }
     public bool CheckForYtDlpUpdates { get; set; } = true;
@@ -14,6 +14,7 @@ public sealed class AppSettings
     public int YtDlpConcurrentFragments { get; set; } = 4;
     public bool UseAria2c { get; set; }
     public bool FastBatchTextImport { get; set; }
+    public string? BrowserCookieSource { get; set; }
     public TrimMode TrimMode { get; set; } = TrimMode.Fast;
     public CompressionMode CompressionMode { get; set; } = CompressionMode.Balance;
     public VideoEncoderChoice VideoEncoder { get; set; } = VideoEncoderChoice.Auto;
@@ -26,6 +27,11 @@ public sealed class AppSettings
         MaxConcurrentFfmpegJobs = 1;
         YtDlpConcurrentFragments = ClampToAllowed(YtDlpConcurrentFragments, [1, 4, 8], 4);
         MetadataCacheTtlHours = Math.Clamp(MetadataCacheTtlHours, 1, 24 * 30);
+        var cookieSource = BrowserCookieSource?.Trim();
+        BrowserCookieSource = string.IsNullOrWhiteSpace(cookieSource) ||
+                              cookieSource.Equals("None", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : cookieSource;
     }
 
     private static int ClampToAllowed(int value, IReadOnlyList<int> allowed, int fallback) =>

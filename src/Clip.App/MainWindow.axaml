@@ -1,0 +1,148 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Clip.App.MainWindow"
+        x:Name="Root"
+        Title="Clip"
+        Width="1120"
+        Height="760"
+        MinWidth="900"
+        MinHeight="620">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="16">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <StackPanel>
+        <TextBlock Text="Clip" Classes="h1" />
+        <TextBlock Text="Cross-platform yt-dlp and ffmpeg desktop app" Foreground="#526071" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Open logs folder" Click="OpenLogsClick" VerticalAlignment="Center" />
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="2*,1.1*" ColumnSpacing="16">
+      <ScrollViewer>
+        <StackPanel Spacing="16">
+          <Border Classes="panel">
+            <StackPanel Spacing="12">
+              <TextBlock Text="URL" Classes="section" />
+              <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBox Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Watermark="Paste a video or audio URL" />
+                <Button Grid.Column="1" Content="Analyze" Command="{Binding AnalyzeCommand}" />
+                <Button Grid.Column="2" Content="Queue" Command="{Binding AddToQueueCommand}" />
+              </Grid>
+
+              <Grid ColumnDefinitions="*,*,*,Auto" ColumnSpacing="8">
+                <ComboBox ItemsSource="{Binding MediaModes}" SelectedItem="{Binding SelectedMediaMode}" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat}" />
+                <ComboBox Grid.Column="2" ItemsSource="{Binding Resolutions}" SelectedItem="{Binding SelectedResolution}" />
+                <Button Grid.Column="3" Content="Import .txt" Command="{Binding ImportTextFileCommand}" />
+              </Grid>
+
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Text="{Binding SaveDirectory}" IsReadOnly="True" />
+                <Button Grid.Column="1" Content="Choose folder" Command="{Binding PickFolderCommand}" />
+              </Grid>
+
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <ComboBox ItemsSource="{Binding CookieSources}"
+                          SelectedItem="{Binding SelectedCookieSource}" />
+                <Button Grid.Column="1" Content="Refresh cookies" Command="{Binding RefreshCookieSourcesCommand}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Downloads" Classes="section" />
+              <ListBox ItemsSource="{Binding Downloads}" MinHeight="260">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Border BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="0,10">
+                      <Grid ColumnDefinitions="*,120,96" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="#526071" HorizontalAlignment="Right" />
+                        <Button Grid.Column="2"
+                                Content="Cancel"
+                                Command="{Binding #Root.DataContext.CancelItemCommand}"
+                                CommandParameter="{Binding}" />
+                        <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Text="{Binding Url}" Foreground="#667085" TextWrapping="Wrap" />
+                        <ProgressBar Grid.Row="2" Grid.ColumnSpan="2" Minimum="0" Maximum="100" Value="{Binding Progress}" Height="8" />
+                        <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding ProgressLabel}" HorizontalAlignment="Right" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Text="History" Classes="section" />
+              <ListBox ItemsSource="{Binding History}" MinHeight="130">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid ColumnDefinitions="*,120" ColumnSpacing="12" Margin="0,6">
+                      <StackPanel>
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding FilePath}" Foreground="#667085" TextWrapping="Wrap" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding Status}" HorizontalAlignment="Right" Foreground="#526071" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+
+      <ScrollViewer Grid.Column="1">
+        <StackPanel Spacing="16">
+          <Border Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Performance" Classes="section" />
+              <TextBlock Text="Concurrent downloads" />
+              <ComboBox ItemsSource="{Binding DownloadConcurrencyOptions}" SelectedItem="{Binding Settings.MaxConcurrentDownloads}" />
+              <TextBlock Text="Concurrent metadata analysis" />
+              <ComboBox ItemsSource="{Binding AnalysisConcurrencyOptions}" SelectedItem="{Binding Settings.MaxConcurrentMetadataAnalysis}" />
+              <TextBlock Text="yt-dlp fragments" />
+              <ComboBox ItemsSource="{Binding FragmentOptions}" SelectedItem="{Binding Settings.YtDlpConcurrentFragments}" />
+              <CheckBox Content="Use aria2c for HTTP downloads (experimental)" IsChecked="{Binding Settings.UseAria2c}" />
+              <TextBlock Text="ffmpeg jobs: 1" Foreground="#526071" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Video Processing" Classes="section" />
+              <TextBlock Text="Trim mode" />
+              <ComboBox ItemsSource="{Binding TrimModes}" SelectedItem="{Binding Settings.TrimMode}" />
+              <TextBlock Text="Compression" />
+              <ComboBox ItemsSource="{Binding CompressionModes}" SelectedItem="{Binding Settings.CompressionMode}" />
+              <TextBlock Text="Encoder" />
+              <ComboBox ItemsSource="{Binding EncoderChoices}" SelectedItem="{Binding Settings.VideoEncoder}" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="panel">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Tools" Classes="section" />
+              <Button Content="Check yt-dlp" Command="{Binding CheckYtDlpCommand}" />
+              <Button Content="Update yt-dlp" Command="{Binding UpdateYtDlpCommand}" />
+              <Button Content="Check ffmpeg" Command="{Binding CheckFfmpegCommand}" />
+              <Button Content="Check ffprobe" Command="{Binding CheckFfprobeCommand}" />
+              <Button Content="Clear metadata cache" Command="{Binding ClearMetadataCacheCommand}" />
+              <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <Border Grid.Row="2" Classes="panel" Padding="12">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Text="{Binding StatusMessage}" />
+        <TextBlock Grid.Column="1" Text="{Binding LogsDirectory}" Foreground="#667085" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>
