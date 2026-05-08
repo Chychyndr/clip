@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <Content Include="Resources\bin\**\*" CopyToOutputDirectory="PreserveNewest" Condition="Exists('Resources\bin')" />
+    <Content Include="..\resources\bin\**\*" Link="Resources\bin\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\resources\bin')" />
     <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Clip.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

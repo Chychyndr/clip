@@ -147,11 +147,13 @@ if (Test-Path $buildOutput) {
 }
 
 $bin = Join-Path $output "Resources\bin"
+$runtimeBin = Join-Path $bin $Runtime
 $required = @("yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe")
 foreach ($name in $required) {
-    $path = Join-Path $bin $name
-    if (-not (Test-Path $path)) {
-        Write-Warning "$name was not found in $bin. Copy it into Clip\Resources\bin and publish again."
+    $runtimePath = Join-Path $runtimeBin $name
+    $legacyPath = Join-Path $bin $name
+    if (-not (Test-Path -LiteralPath $runtimePath) -and -not (Test-Path -LiteralPath $legacyPath)) {
+        Write-Warning "$name was not found in $runtimeBin. Copy it into resources\bin\$Runtime and publish again."
     }
 }
 

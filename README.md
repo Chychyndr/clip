@@ -83,9 +83,9 @@ Requirements:
 Place optional bundled tools here:
 
 ```text
-Clip\Resources\bin\yt-dlp.exe
-Clip\Resources\bin\ffmpeg.exe
-Clip\Resources\bin\ffprobe.exe
+resources\bin\win-x64\yt-dlp.exe
+resources\bin\win-x64\ffmpeg.exe
+resources\bin\win-x64\ffprobe.exe
 ```
 
 Build commands:
@@ -203,7 +203,7 @@ signtool verify /pa /v .\artifacts\ClipSetup.exe
 
 | Problem | Fix |
 | --- | --- |
-| `Missing required binary` | Check `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` in `Clip\Resources\bin`. |
+| `Missing required binary` | Check `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` in `resources\bin\win-x64`. |
 | `Sign in to confirm you're not a bot` | Sign in to YouTube in Chrome, Edge, Firefox, or Brave, then retry. |
 | `Could not copy Chrome cookie database` | Close Chrome and retry. Clip can also try Edge, Firefox, or Brave if available. |
 | `Clip could not locate the output file` | Update `yt-dlp.exe`, check the output folder, and verify write permissions. |
