@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Clip.Core.Tools;
 
 public sealed class ToolResolver
@@ -40,16 +38,12 @@ public sealed class ToolResolver
                 continue;
             }
 
-            var permissionMessage = ensureExecutable
-                ? TryEnsureExecutable(candidate)
-                : null;
-
             return ExternalToolResolution.Found(
                 tool,
                 displayName,
                 candidate,
                 isFromPath: false,
-                permissionMessage);
+                message: null);
         }
 
         foreach (var candidate in GetPathCandidates(tool))
@@ -114,59 +108,6 @@ public sealed class ToolResolver
                 yield return Path.Combine(directory, fileName + ".exe");
             }
         }
-    }
-
-    private string? TryEnsureExecutable(string path)
-    {
-        if (!_platform.IsMacOS)
-        {
-            return null;
-        }
-
-        try
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                return null;
-            }
-
-            var mode = File.GetUnixFileMode(path);
-            const UnixFileMode executableBits =
-                UnixFileMode.UserExecute |
-                UnixFileMode.GroupExecute |
-                UnixFileMode.OtherExecute;
-
-            if ((mode & executableBits) != 0)
-            {
-                return null;
-            }
-
-            File.SetUnixFileMode(path, mode | executableBits);
-            return null;
-        }
-        catch
-        {
-            try
-            {
-                var startInfo = new ProcessStartInfo
-                {
-                    FileName = "chmod",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                startInfo.ArgumentList.Add("+x");
-                startInfo.ArgumentList.Add(path);
-
-                using var process = Process.Start(startInfo);
-                process?.WaitForExit(3000);
-            }
-            catch
-            {
-                return $"{System.IO.Path.GetFileName(path)} exists but Clip could not grant execute permission.";
-            }
-        }
-
-        return null;
     }
 
     private string GetFileName(ExternalTool tool)

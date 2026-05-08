@@ -6,37 +6,33 @@
     DragOver="OnDragOver"
     Drop="OnDrop">
     <Border Style="{StaticResource GlassCardBorderStyle}">
-        <Grid RowSpacing="12">
+        <Grid RowSpacing="10">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <TextBlock Text="URL" FontWeight="SemiBold" />
 
-            <Grid Grid.Row="1" ColumnSpacing="10">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <TextBox Grid.Row="1"
+                     Text="{Binding UrlText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     PlaceholderText="Paste a video link to analyze automatically, drop a link, or drop a .txt file"
+                     MinHeight="46"
+                     HorizontalAlignment="Stretch"
+                     CornerRadius="12" />
 
-                <TextBox Text="{Binding UrlText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                         PlaceholderText="Paste a video link to analyze automatically, drop a link, or drop a .txt file"
-                         MinWidth="260"
-                         MinHeight="42"
-                         CornerRadius="12" />
-
-                <Button Grid.Column="1"
-                        Style="{StaticResource IconButtonStyle}"
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="10">
+                <Button Style="{StaticResource IconButtonStyle}"
                         Command="{Binding PasteCommand}"
                         ToolTipService.ToolTip="Paste">
                     <SymbolIcon Symbol="Paste" />
                 </Button>
 
-                <Button Grid.Column="2"
-                        Style="{StaticResource PillButtonStyle}"
+                <Button Style="{StaticResource PillButtonStyle}"
                         Command="{Binding ImportLinksCommand}"
                         ToolTipService.ToolTip="Import links from .txt">
                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -45,15 +41,14 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="3"
-                        Style="{StaticResource PillButtonStyle}"
+                <Button Style="{StaticResource PillButtonStyle}"
                         Command="{Binding QueueDownloadCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <SymbolIcon Symbol="Download" />
                         <TextBlock Text="Download" />
                     </StackPanel>
                 </Button>
-            </Grid>
+            </StackPanel>
         </Grid>
     </Border>
 </UserControl>

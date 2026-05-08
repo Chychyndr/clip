@@ -51,19 +51,6 @@ public sealed class FfmpegEncoderDetector
 
     public static VideoEncoderChoice ChooseRecommendedEncoder(ISet<string> availableEncoders, HostPlatform platform)
     {
-        if (platform.IsMacOS)
-        {
-            if (availableEncoders.Contains("h264_videotoolbox"))
-            {
-                return VideoEncoderChoice.AppleH264;
-            }
-
-            if (availableEncoders.Contains("hevc_videotoolbox"))
-            {
-                return VideoEncoderChoice.AppleHevc;
-            }
-        }
-
         if (platform.IsWindows)
         {
             if (availableEncoders.Contains("h264_nvenc"))

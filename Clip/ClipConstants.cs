@@ -13,11 +13,11 @@ public static class ClipConstants
     public static string BinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin", HostPlatformDetector.Detect().ResourceFolderName);
     public static string LegacyBinDirectory => Path.Combine(AppBaseDirectory, "Resources", "bin");
     public static string YtDlpPath => new ToolResolver(AppBaseDirectory).Resolve(ExternalTool.YtDlp).Path
-        ?? Path.Combine(BinDirectory, OperatingSystem.IsWindows() ? "yt-dlp.exe" : "yt-dlp");
+        ?? Path.Combine(BinDirectory, "yt-dlp.exe");
     public static string FFmpegPath => new ToolResolver(AppBaseDirectory).Resolve(ExternalTool.Ffmpeg).Path
-        ?? Path.Combine(BinDirectory, OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg");
+        ?? Path.Combine(BinDirectory, "ffmpeg.exe");
     public static string FFprobePath => new ToolResolver(AppBaseDirectory).Resolve(ExternalTool.Ffprobe).Path
-        ?? Path.Combine(BinDirectory, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
+        ?? Path.Combine(BinDirectory, "ffprobe.exe");
 
     public static string AppDataDirectory => ClipPaths.AppDataDirectory;
     public static string LogDirectory => ClipPaths.LogDirectory;

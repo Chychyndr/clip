@@ -58,14 +58,6 @@ public sealed class YtDlpUpdateService
                 await stream.CopyToAsync(file, cancellationToken);
             }
 
-            if (_toolResolver.Platform.IsMacOS && !OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(tempPath, File.GetUnixFileMode(tempPath) |
-                    UnixFileMode.UserExecute |
-                    UnixFileMode.GroupExecute |
-                    UnixFileMode.OtherExecute);
-            }
-
             status?.Report("Verifying file");
             var verification = await _processRunner.RunAsync(tempPath, ["--version"], cancellationToken: cancellationToken);
             if (!verification.IsSuccess)
@@ -140,19 +132,7 @@ public sealed class YtDlpUpdateService
 
     private string? SelectAssetUrl(YtDlpRelease release)
     {
-        string[] preferredNames;
-        if (_toolResolver.Platform.IsWindows)
-        {
-            preferredNames = ["yt-dlp.exe"];
-        }
-        else if (_toolResolver.Platform.IsMacOS)
-        {
-            preferredNames = ["yt-dlp_macos", "yt-dlp"];
-        }
-        else
-        {
-            preferredNames = ["yt-dlp"];
-        }
+        string[] preferredNames = ["yt-dlp.exe"];
 
         return preferredNames
             .Select(name => release.Assets.FirstOrDefault(asset => asset.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))

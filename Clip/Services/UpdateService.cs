@@ -78,11 +78,6 @@ public sealed class UpdateService
                 await stream.CopyToAsync(file, cancellationToken);
             }
 
-            if (_toolResolver.Platform.IsMacOS && !OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(tempPath, File.GetUnixFileMode(tempPath) | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
-            }
-
             status?.Report("Verifying file");
             var verification = await _processRunner.RunAsync(tempPath, ["--version"], cancellationToken: cancellationToken);
             if (!verification.IsSuccess)
@@ -179,19 +174,7 @@ public sealed class UpdateService
 
     private string? SelectAssetUrl(YtDlpRelease release)
     {
-        string[] preferredNames;
-        if (_toolResolver.Platform.IsWindows)
-        {
-            preferredNames = ["yt-dlp.exe"];
-        }
-        else if (_toolResolver.Platform.IsMacOS)
-        {
-            preferredNames = ["yt-dlp_macos", "yt-dlp"];
-        }
-        else
-        {
-            preferredNames = ["yt-dlp"];
-        }
+        string[] preferredNames = ["yt-dlp.exe"];
 
         foreach (var preferred in preferredNames)
         {

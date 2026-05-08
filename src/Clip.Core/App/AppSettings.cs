@@ -66,7 +66,5 @@ public enum VideoEncoderChoice
     IntelH264,
     IntelHevc,
     AmdH264,
-    AmdHevc,
-    AppleH264,
-    AppleHevc
+    AmdHevc
 }

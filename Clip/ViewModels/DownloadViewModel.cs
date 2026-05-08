@@ -488,7 +488,7 @@ public sealed class DownloadViewModel : ObservableObject
             return;
         }
 
-        if (OperatingSystem.IsWindows() && File.Exists(path))
+        if (File.Exists(path))
         {
             Process.Start(new ProcessStartInfo
             {
@@ -505,10 +505,9 @@ public sealed class DownloadViewModel : ObservableObject
             return;
         }
 
-        var fileName = OperatingSystem.IsMacOS() ? "open" : "explorer.exe";
         Process.Start(new ProcessStartInfo
         {
-            FileName = fileName,
+            FileName = "explorer.exe",
             ArgumentList = { folder },
             UseShellExecute = false
         });

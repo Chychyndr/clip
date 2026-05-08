@@ -129,8 +129,6 @@ public static class FfmpegCommandBuilder
         VideoEncoderChoice.IntelHevc => "hevc_qsv",
         VideoEncoderChoice.AmdH264 => "h264_amf",
         VideoEncoderChoice.AmdHevc => "hevc_amf",
-        VideoEncoderChoice.AppleH264 => "h264_videotoolbox",
-        VideoEncoderChoice.AppleHevc => "hevc_videotoolbox",
         _ => "libx264"
     };
 

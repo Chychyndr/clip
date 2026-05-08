@@ -7,8 +7,7 @@ public sealed record HostPlatform(HostOperatingSystem OperatingSystem, HostArchi
     public string RuntimeIdentifier => (OperatingSystem, Architecture) switch
     {
         (HostOperatingSystem.Windows, HostArchitecture.X64) => "win-x64",
-        (HostOperatingSystem.MacOS, HostArchitecture.X64) => "osx-x64",
-        (HostOperatingSystem.MacOS, HostArchitecture.Arm64) => "osx-arm64",
+        (HostOperatingSystem.Windows, HostArchitecture.Arm64) => "win-arm64",
         _ => "unknown"
     };
 
@@ -16,22 +15,15 @@ public sealed record HostPlatform(HostOperatingSystem OperatingSystem, HostArchi
     {
         (HostOperatingSystem.Windows, HostArchitecture.X64) => "win-x64",
         (HostOperatingSystem.Windows, HostArchitecture.Arm64) => "win-arm64",
-        (HostOperatingSystem.MacOS, HostArchitecture.X64) => "macos-x64",
-        (HostOperatingSystem.MacOS, HostArchitecture.Arm64) => "macos-arm64",
-        (HostOperatingSystem.Linux, HostArchitecture.X64) => "linux-x64",
-        (HostOperatingSystem.Linux, HostArchitecture.Arm64) => "linux-arm64",
         _ => "unknown"
     };
 
     public bool IsWindows => OperatingSystem == HostOperatingSystem.Windows;
-    public bool IsMacOS => OperatingSystem == HostOperatingSystem.MacOS;
 }
 
 public enum HostOperatingSystem
 {
     Windows,
-    MacOS,
-    Linux,
     Unknown
 }
 
@@ -48,11 +40,7 @@ public static class HostPlatformDetector
     {
         var os = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? HostOperatingSystem.Windows
-            : RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                ? HostOperatingSystem.MacOS
-                : RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
-                    ? HostOperatingSystem.Linux
-                    : HostOperatingSystem.Unknown;
+            : HostOperatingSystem.Unknown;
 
         var architecture = RuntimeInformation.ProcessArchitecture switch
         {

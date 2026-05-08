@@ -451,7 +451,7 @@ public sealed class MainViewModel : ObservableObject
         Directory.CreateDirectory(ClipConstants.LogDirectory);
         Process.Start(new ProcessStartInfo
         {
-            FileName = OperatingSystem.IsMacOS() ? "open" : "explorer.exe",
+            FileName = "explorer.exe",
             ArgumentList = { ClipConstants.LogDirectory },
             UseShellExecute = false
         });

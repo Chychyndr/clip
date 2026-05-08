@@ -17,15 +17,6 @@ public static class ClipPaths
 
     public static string GetAppDataDirectory()
     {
-        if (OperatingSystem.IsMacOS())
-        {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Library",
-                "Application Support",
-                AppName);
-        }
-
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrWhiteSpace(local))
         {
@@ -39,15 +30,6 @@ public static class ClipPaths
 
     public static string GetLogDirectory()
     {
-        if (OperatingSystem.IsMacOS())
-        {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Library",
-                "Logs",
-                AppName);
-        }
-
         return Path.Combine(AppDataDirectory, "logs");
     }
 

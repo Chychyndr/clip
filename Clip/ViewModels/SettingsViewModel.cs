@@ -38,9 +38,7 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
         VideoEncoderChoice.IntelH264,
         VideoEncoderChoice.IntelHevc,
         VideoEncoderChoice.AmdH264,
-        VideoEncoderChoice.AmdHevc,
-        VideoEncoderChoice.AppleH264,
-        VideoEncoderChoice.AppleHevc
+        VideoEncoderChoice.AmdHevc
     ];
 
     public AppSettings Current => CreateSnapshot();

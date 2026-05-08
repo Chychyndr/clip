@@ -7,22 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            runtime: win-x64
-            artifact: Clip-win-x64
-          - os: macos-latest
-            runtime: osx-arm64
-            artifact: Clip-macos-arm64
-          - os: macos-latest
-            runtime: osx-x64
-            artifact: Clip-macos-x64
-
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -32,20 +18,21 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore --configfile NuGet.Config
+        run: dotnet restore .\Clip.sln --configfile NuGet.Config -p:Platform=x64
 
       - name: Build
-        run: dotnet build --no-restore -c Release
+        run: dotnet build .\Clip.sln --no-restore -c Release -p:Platform=x64
 
       - name: Publish
-        run: dotnet publish src/Clip.App/Clip.App.csproj --no-restore -c Release -r ${{ matrix.runtime }} --self-contained true -o artifacts/${{ matrix.artifact }}
+        shell: pwsh
+        run: .\scripts\publish-unpackaged.ps1 -Configuration Release -Runtime win-x64 -Platform x64
 
       - name: Zip artifact
         shell: pwsh
-        run: Compress-Archive -Path "artifacts/${{ matrix.artifact }}/*" -DestinationPath "artifacts/${{ matrix.artifact }}.zip" -Force
+        run: Compress-Archive -Path "artifacts\Clip-win-x64\*" -DestinationPath "artifacts\Clip-win-x64.zip" -Force
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: artifacts/${{ matrix.artifact }}.zip
+          name: Clip-win-x64
+          path: artifacts\Clip-win-x64.zip
