@@ -13,9 +13,16 @@
 
 Clip is a Windows-only WinUI 3 desktop app for downloading video and audio from supported links. It uses `yt-dlp`, `ffmpeg`, and `ffprobe` for media work, and keeps a native Windows shell with tray behavior, clipboard monitoring, queue controls, history, trim, compression, and update helpers.
 
+## Screenshots
+
+![Main window](docs/screenshots/main-window.png)
+![Download queue](docs/screenshots/download-queue.png)
+![Settings](docs/screenshots/settings.png)
+
 ## Contents
 
 - [Features](#features)
+- [Screenshots](#screenshots)
 - [Supported Services](#supported-services)
 - [Tray Menu](#tray-menu)
 - [TXT Import](#txt-import)
