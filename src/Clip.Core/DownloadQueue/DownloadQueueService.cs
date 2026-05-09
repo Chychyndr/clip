@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Clip.Core.App;
 using Clip.Core.History;
 using Clip.Core.Models;
+using Clip.Core.Platform;
 using Clip.Core.Queue;
 using Clip.Core.Services;
 using Clip.Core.Tools;
@@ -15,18 +16,21 @@ public sealed class DownloadQueueService
     private readonly FFmpegService _ffmpegService;
     private readonly DownloadHistoryStore _historyStore;
     private readonly IAppSettingsProvider _settingsProvider;
+    private readonly IUiDispatcher _uiDispatcher;
     private QueueService _queueService;
 
     public DownloadQueueService(
         YtDlpService ytDlpService,
         FFmpegService ffmpegService,
         DownloadHistoryStore historyStore,
-        IAppSettingsProvider settingsProvider)
+        IAppSettingsProvider settingsProvider,
+        IUiDispatcher? uiDispatcher = null)
     {
         _ytDlpService = ytDlpService;
         _ffmpegService = ffmpegService;
         _historyStore = historyStore;
         _settingsProvider = settingsProvider;
+        _uiDispatcher = uiDispatcher ?? ImmediateUiDispatcher.Instance;
         _queueService = CreateQueueService(settingsProvider.Current);
     }
 
@@ -51,36 +55,45 @@ public sealed class DownloadQueueService
             Platform = UrlDetector.DetectPlatform(url),
             Cancellation = new CancellationTokenSource()
         };
-        Items.Add(item);
+        _uiDispatcher.Invoke(() => Items.Add(item));
         return item;
     }
 
     public async Task AnalyzeAsync(DownloadItem item, CancellationToken cancellationToken = default)
     {
-        item.Status = DownloadStatus.Analyzing;
-        item.CurrentStage = "Analyzing";
-        item.ErrorMessage = null;
+        await _uiDispatcher.InvokeAsync(() =>
+        {
+            item.Status = DownloadStatus.Analyzing;
+            item.CurrentStage = "Analyzing";
+            item.ErrorMessage = null;
+        });
 
         await _queueService.AnalyzeAsync(async token =>
         {
             using var linked = CreateLinkedToken(item, token, cancellationToken);
             var result = await _ytDlpService.AnalyzeAsync(item.Url, item.BrowserCookieSource, linked.Token);
-            item.Metadata = result.Metadata;
-            item.Title = result.Metadata.DisplayTitle;
-            item.Thumbnail = result.Metadata.BestThumbnail;
-            item.DurationSeconds = result.Metadata.DurationSeconds;
-            item.ClipRange.DurationSeconds = result.Metadata.DurationSeconds ?? 0;
-            item.Status = DownloadStatus.Ready;
-            item.CurrentStage = result.IsFromCache ? "Ready from metadata cache" : "Ready";
+            await _uiDispatcher.InvokeAsync(() =>
+            {
+                item.Metadata = result.Metadata;
+                item.Title = result.Metadata.DisplayTitle;
+                item.Thumbnail = result.Metadata.BestThumbnail;
+                item.DurationSeconds = result.Metadata.DurationSeconds;
+                item.ClipRange.DurationSeconds = result.Metadata.DurationSeconds ?? 0;
+                item.Status = DownloadStatus.Ready;
+                item.CurrentStage = result.IsFromCache ? "Ready from metadata cache" : "Ready";
+            });
         }, cancellationToken);
     }
 
     public async Task DownloadAsync(DownloadItem item, CancellationToken cancellationToken = default)
     {
-        item.Status = DownloadStatus.Downloading;
-        item.CurrentStage = "Downloading";
-        item.Progress = 0;
-        item.ErrorMessage = null;
+        await _uiDispatcher.InvokeAsync(() =>
+        {
+            item.Status = DownloadStatus.Downloading;
+            item.CurrentStage = "Downloading";
+            item.Progress = 0;
+            item.ErrorMessage = null;
+        });
 
         try
         {
@@ -99,64 +112,105 @@ public sealed class DownloadQueueService
                     },
                     progress =>
                     {
-                        if (progress.Percent is { } percent)
+                        _uiDispatcher.Post(() =>
                         {
-                            item.Progress = percent;
-                        }
+                            if (progress.Percent is { } percent)
+                            {
+                                item.Progress = percent;
+                            }
 
-                        item.Speed = progress.Speed;
-                        item.Eta = progress.Eta;
-                        item.CurrentStage = progress.Status ?? progress.Stage;
+                            item.Speed = progress.Speed;
+                            item.Eta = progress.Eta;
+                            item.CurrentStage = progress.Status ?? progress.Stage;
+                        });
                     },
                     linked.Token);
 
-                item.OutputFilePath = string.IsNullOrWhiteSpace(result.OutputPath) ? item.OutputFilePath : result.OutputPath;
+                var outputPath = string.IsNullOrWhiteSpace(result.OutputPath)
+                    ? item.OutputFilePath
+                    : result.OutputPath;
+                await _uiDispatcher.InvokeAsync(() => item.OutputFilePath = outputPath);
 
-                if (item.ClipRange.IsEnabled && item.OutputFilePath is not null)
+                if (item.ClipRange.IsEnabled && outputPath is not null)
                 {
-                    item.Status = DownloadStatus.PostProcessing;
-                    item.CurrentStage = "Trimming";
+                    await _uiDispatcher.InvokeAsync(() =>
+                    {
+                        item.Status = DownloadStatus.PostProcessing;
+                        item.CurrentStage = "Trimming";
+                    });
+                    var originalPath = outputPath;
+                    var trimOutputPath = BuildTrimOutputPath(originalPath);
                     await _queueService.RunFfmpegAsync(
                         ffmpegToken => _ffmpegService.TrimAsync(
-                            item.OutputFilePath,
-                            BuildTrimOutputPath(item.OutputFilePath),
+                            originalPath,
+                            trimOutputPath,
                             item.ClipRange.StartSeconds,
                             item.ClipRange.EndSeconds,
                             ffmpegToken),
                         linked.Token);
+
+                    outputPath = trimOutputPath;
+                    await _uiDispatcher.InvokeAsync(() => item.OutputFilePath = trimOutputPath);
+                    if (!_settingsProvider.Current.KeepOriginalWhenClipping)
+                    {
+                        TryDeleteOriginalClipInput(originalPath, trimOutputPath);
+                    }
                 }
 
-                item.Progress = 100;
-                item.CompletedAt = DateTimeOffset.Now;
-                item.Status = DownloadStatus.Completed;
-                item.CurrentStage = "Completed";
-                await _historyStore.AddAsync(ToHistoryEntry(item), linked.Token);
+                await _uiDispatcher.InvokeAsync(() =>
+                {
+                    item.OutputFilePath = outputPath;
+                    item.Progress = 100;
+                    item.CompletedAt = DateTimeOffset.Now;
+                    item.Status = DownloadStatus.Completed;
+                    item.CurrentStage = "Completed";
+                });
+
+                if (!_settingsProvider.Current.DisableHistory)
+                {
+                    await AddHistoryAsync(ToHistoryEntry(item), linked.Token);
+                }
             }, cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            item.Status = DownloadStatus.Cancelled;
-            item.CurrentStage = "Cancelled";
+            await _uiDispatcher.InvokeAsync(() =>
+            {
+                item.Status = DownloadStatus.Cancelled;
+                item.CurrentStage = "Cancelled";
+            });
         }
         catch (Exception ex)
         {
-            item.Status = DownloadStatus.Failed;
-            item.CurrentStage = "Failed";
-            item.ErrorMessage = ex.Message;
+            await _uiDispatcher.InvokeAsync(() =>
+            {
+                item.Status = DownloadStatus.Failed;
+                item.CurrentStage = "Failed";
+                item.ErrorMessage = ex.Message;
+            });
         }
     }
 
     public void Cancel(DownloadItem item)
     {
         item.Cancellation?.Cancel();
-        item.Status = DownloadStatus.Cancelled;
-        item.CurrentStage = "Cancelled";
+        _uiDispatcher.Invoke(() =>
+        {
+            item.Status = DownloadStatus.Cancelled;
+            item.CurrentStage = "Cancelled";
+        });
     }
 
-    public void ApplySettings()
+    public bool ApplySettings()
     {
         _settingsProvider.Current.Normalize();
+        if (Items.Any(item => item.IsActive))
+        {
+            return false;
+        }
+
         _queueService = CreateQueueService(_settingsProvider.Current);
+        return true;
     }
 
     private static QueueService CreateQueueService(AppSettings settings) =>
@@ -179,15 +233,50 @@ public sealed class DownloadQueueService
         return Path.Combine(directory, $"{fileName}.clip{extension}");
     }
 
-    private static DownloadHistoryEntry ToHistoryEntry(DownloadItem item) =>
-        new(
+    private DownloadHistoryEntry ToHistoryEntry(DownloadItem item)
+    {
+        var settings = _settingsProvider.Current;
+        return new DownloadHistoryEntry(
             item.Title,
-            item.Url,
+            settings.StoreOnlyHistoryTitles ? "" : item.Url,
             item.Platform,
-            item.Format,
-            item.Resolution,
-            item.OutputFilePath ?? "",
+            settings.StoreOnlyHistoryTitles ? "" : item.Format,
+            settings.StoreOnlyHistoryTitles ? "" : item.Resolution,
+            settings.StoreOnlyHistoryTitles ? "" : (item.OutputFilePath ?? ""),
             item.CompletedAt ?? DateTimeOffset.Now,
             item.Status);
+    }
+
+    private async Task AddHistoryAsync(DownloadHistoryEntry entry, CancellationToken cancellationToken)
+    {
+        List<DownloadHistoryEntry>? snapshot = null;
+        await _uiDispatcher.InvokeAsync(() =>
+        {
+            _historyStore.Items.Insert(0, entry);
+            snapshot = _historyStore.Items.ToList();
+        });
+
+        await _historyStore.SaveSnapshotAsync(snapshot ?? [], cancellationToken);
+    }
+
+    private static void TryDeleteOriginalClipInput(string originalPath, string trimOutputPath)
+    {
+        if (string.Equals(originalPath, trimOutputPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(originalPath))
+            {
+                File.Delete(originalPath);
+            }
+        }
+        catch
+        {
+            // Deleting the original is best-effort; the clipped output is already available.
+        }
+    }
 
 }

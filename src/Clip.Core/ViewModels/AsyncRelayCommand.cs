@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using System.Diagnostics;
 
 namespace Clip.Core.ViewModels;
 
@@ -25,21 +26,13 @@ public sealed class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
-        if (!CanExecute(parameter))
-        {
-            return;
-        }
-
         try
         {
-            _isRunning = true;
-            RaiseCanExecuteChanged();
-            await _execute(parameter);
+            await ExecuteAsync(parameter);
         }
-        finally
+        catch (Exception ex)
         {
-            _isRunning = false;
-            RaiseCanExecuteChanged();
+            Debug.WriteLine(ex);
         }
     }
 

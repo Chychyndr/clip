@@ -10,6 +10,7 @@ namespace Clip.Services;
 
 public sealed partial class FFmpegService
 {
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMinutes(2);
     private readonly ProcessRunner _processRunner;
     private readonly ToolResolver _toolResolver;
     private readonly IAppSettingsProvider _settingsProvider;
@@ -138,7 +139,8 @@ public sealed partial class FFmpegService
                 "-of", "default=noprint_wrappers=1:nokey=1",
                 inputPath
             ],
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            timeout: ProbeTimeout);
 
         if (!result.IsSuccess ||
             !double.TryParse(result.StandardOutput.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var duration))
@@ -151,6 +153,17 @@ public sealed partial class FFmpegService
 
     public async Task<FfmpegEncoderDetectionResult> DetectEncodersAsync(CancellationToken cancellationToken) =>
         await GetEncoderDetectionAsync(cancellationToken);
+
+    public string GetToolStatus()
+    {
+        var ffmpeg = _toolResolver.Resolve(ExternalTool.Ffmpeg);
+        var ffprobe = _toolResolver.Resolve(ExternalTool.Ffprobe);
+        return string.Join(Environment.NewLine, new[]
+        {
+            FormatToolResolution(ffmpeg),
+            FormatToolResolution(ffprobe)
+        });
+    }
 
     private string ResolveRequiredTool(ExternalTool tool)
     {
@@ -166,6 +179,17 @@ public sealed partial class FFmpegService
         }
 
         throw new MissingBinaryException([resolved.Message ?? $"{ToolResolver.GetDisplayName(tool)} was not found."]);
+    }
+
+    private static string FormatToolResolution(ExternalToolResolution resolution)
+    {
+        if (!resolution.IsFound || string.IsNullOrWhiteSpace(resolution.Path))
+        {
+            return resolution.Message ?? $"{resolution.DisplayName} was not found.";
+        }
+
+        var source = resolution.IsFromPath ? "external PATH executable" : "bundled executable";
+        return $"{resolution.DisplayName}: {source}: {resolution.Path}";
     }
 
     private async Task<VideoEncoderChoice> ResolveVideoEncoderAsync(CancellationToken cancellationToken)

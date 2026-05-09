@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Clip.Core.Files;
 
 namespace Clip.Core.Cache;
 
@@ -33,7 +34,7 @@ public sealed class MetadataCacheService
 
         var path = GetCachePath(url, ytDlpVersion, analysisOptionsKey);
         var json = JsonSerializer.Serialize(entry, JsonOptions);
-        await File.WriteAllTextAsync(path, json, cancellationToken);
+        await AtomicFileWriter.WriteAllTextAsync(path, json, cancellationToken);
     }
 
     public async Task<MetadataCacheReadResult> TryReadAsync(
@@ -82,6 +83,35 @@ public sealed class MetadataCacheService
         }
 
         Directory.CreateDirectory(_cacheDirectory);
+    }
+
+    public async Task PruneAsync(
+        TimeSpan ttl,
+        long maxFileBytes,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_cacheDirectory))
+        {
+            return;
+        }
+
+        var cutoffUtc = (_timeProvider.GetUtcNow() - ttl).UtcDateTime;
+        foreach (var path in Directory.EnumerateFiles(_cacheDirectory, "*.json", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var info = new FileInfo(path);
+                if (info.Length > maxFileBytes || info.LastWriteTimeUtc < cutoffUtc)
+                {
+                    await AtomicFileWriter.DeleteIfExistsAsync(path, cancellationToken);
+                }
+            }
+            catch
+            {
+                // Cache pruning must not block metadata analysis.
+            }
+        }
     }
 
     public string GetCachePath(string url, string ytDlpVersion, string analysisOptionsKey)

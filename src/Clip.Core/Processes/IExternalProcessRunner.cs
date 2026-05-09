@@ -8,7 +8,8 @@ public interface IExternalProcessRunner
         string? workingDirectory = null,
         Action<string>? standardOutput = null,
         Action<string>? standardError = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null);
 }
 
 public sealed record ExternalProcessResult(int ExitCode, string StandardOutput, string StandardError)

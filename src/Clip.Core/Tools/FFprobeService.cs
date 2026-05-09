@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Clip.Core.Processes;
 
@@ -5,6 +6,7 @@ namespace Clip.Core.Tools;
 
 public sealed class FFprobeService
 {
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMinutes(2);
     private readonly ToolResolver _toolResolver;
     private readonly IExternalProcessRunner _processRunner;
 
@@ -29,7 +31,11 @@ public sealed class FFprobeService
             inputPath
         };
 
-        var result = await _processRunner.RunAsync(ffprobe.Path!, args, cancellationToken: cancellationToken);
+        var result = await _processRunner.RunAsync(
+            ffprobe.Path!,
+            args,
+            cancellationToken: cancellationToken,
+            timeout: ProbeTimeout);
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException(FirstErrorLine(result.StandardError, "ffprobe failed to read media information."));
@@ -38,7 +44,11 @@ public sealed class FFprobeService
         using var document = JsonDocument.Parse(result.StandardOutput);
         if (document.RootElement.TryGetProperty("format", out var format) &&
             format.TryGetProperty("duration", out var durationElement) &&
-            double.TryParse(durationElement.GetString(), out var duration))
+            double.TryParse(
+                durationElement.GetString(),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out var duration))
         {
             return duration;
         }
@@ -52,11 +62,6 @@ public sealed class FFprobeService
         if (!resolved.IsFound || resolved.Path is null)
         {
             throw new FileNotFoundException("ffprobe was not found.", "ffprobe");
-        }
-
-        if (!string.IsNullOrWhiteSpace(resolved.Message))
-        {
-            throw new InvalidOperationException(resolved.Message);
         }
 
         return resolved;

@@ -140,6 +140,12 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void StartQueueWork()
     {
+        if (!_dispatcherQueue.HasThreadAccess)
+        {
+            _dispatcherQueue.TryEnqueue(StartQueueWork);
+            return;
+        }
+
         StartPendingAnalyses();
         StartReadyDownloads();
         RaiseQueueState();
@@ -202,25 +208,28 @@ public sealed class DownloadViewModel : ObservableObject
         try
         {
             var metadata = await _ytDlpService.AnalyzeAsync(item.Url, cancellationToken);
-            item.Metadata = metadata;
-            item.Title = metadata.DisplayTitle;
-            item.Platform = URLDetector.DetectPlatform(metadata.WebpageUrl ?? item.Url);
-            HydrateFromMetadata(item);
-            item.Status = DownloadStatus.Ready;
-            item.StatusText = metadata.IsFromCache ? "Ready - metadata cache" : "Ready";
-            item.CurrentStage = "Ready";
+            await RunOnUiAsync(() =>
+            {
+                item.Metadata = metadata;
+                item.Title = metadata.DisplayTitle;
+                item.Platform = URLDetector.DetectPlatform(metadata.WebpageUrl ?? item.Url);
+                HydrateFromMetadata(item);
+                item.Status = DownloadStatus.Ready;
+                item.StatusText = metadata.IsFromCache ? "Ready - metadata cache" : "Ready";
+                item.CurrentStage = "Ready";
+            });
         }
         catch (OperationCanceledException)
         {
-            MarkCancelled(item);
+            await MarkCancelledAsync(item);
         }
         catch (MissingBinaryException ex)
         {
-            MarkFailed(item, ex.Message, "Missing required tools");
+            await MarkFailedAsync(item, ex.Message, "Missing required tools");
         }
         catch (Exception ex)
         {
-            MarkFailed(item, ex.Message, "Analysis failed");
+            await MarkFailedAsync(item, ex.Message, "Analysis failed");
         }
         finally
         {
@@ -257,8 +266,11 @@ public sealed class DownloadViewModel : ObservableObject
                 progress => _ytDlpService.DownloadAsync(item, progress, cancellationToken),
                 cancellationToken);
 
-            item.OutputFilePath = outputPath;
-            item.Progress = Math.Max(item.Progress, downloadEnd);
+            await RunOnUiAsync(() =>
+            {
+                item.OutputFilePath = outputPath;
+                item.Progress = Math.Max(item.Progress, downloadEnd);
+            });
             ReleaseDownloadSlot(item, ref downloadSlotReleased);
 
             if (hasClip || hasCompression)
@@ -266,25 +278,28 @@ public sealed class DownloadViewModel : ObservableObject
                 outputPath = await RunPostProcessingAsync(item, outputPath, hasClip, hasCompression, downloadEnd, cancellationToken);
             }
 
-            item.OutputFilePath = outputPath;
-            item.CompletedAt = DateTimeOffset.Now;
-            item.Progress = 100;
-            item.Status = DownloadStatus.Completed;
-            item.CurrentStage = "Completed";
-            item.StatusText = "Completed";
-            AddHistory(item, DownloadStatus.Completed);
+            await RunOnUiAsync(() =>
+            {
+                item.OutputFilePath = outputPath;
+                item.CompletedAt = DateTimeOffset.Now;
+                item.Progress = 100;
+                item.Status = DownloadStatus.Completed;
+                item.CurrentStage = "Completed";
+                item.StatusText = "Completed";
+                AddHistory(item, DownloadStatus.Completed);
+            });
         }
         catch (OperationCanceledException)
         {
-            MarkCancelled(item);
+            await MarkCancelledAsync(item);
         }
         catch (MissingBinaryException ex)
         {
-            MarkFailed(item, ex.Message, "Missing required tools");
+            await MarkFailedAsync(item, ex.Message, "Missing required tools");
         }
         catch (Exception ex)
         {
-            MarkFailed(item, ex.Message, "Failed");
+            await MarkFailedAsync(item, ex.Message, "Failed");
         }
         finally
         {
@@ -304,9 +319,12 @@ public sealed class DownloadViewModel : ObservableObject
         double downloadEnd,
         CancellationToken cancellationToken)
     {
-        item.Status = DownloadStatus.PostProcessing;
-        item.CurrentStage = "Post-processing";
-        item.StatusText = "Waiting for ffmpeg";
+        await RunOnUiAsync(() =>
+        {
+            item.Status = DownloadStatus.PostProcessing;
+            item.CurrentStage = "Post-processing";
+            item.StatusText = "Waiting for ffmpeg";
+        });
         await _ffmpegSemaphore.WaitAsync(cancellationToken);
         lock (_queueGate)
         {
@@ -318,9 +336,10 @@ public sealed class DownloadViewModel : ObservableObject
             var outputPath = inputPath;
             if (hasClip)
             {
-                item.StatusText = _settings.TrimMode == TrimMode.Fast
-                    ? "Fast trim with stream copy"
-                    : "Exact trim with re-encode";
+                await RunOnUiAsync(() =>
+                    item.StatusText = _settings.TrimMode == TrimMode.Fast
+                        ? "Fast trim with stream copy"
+                        : "Exact trim with re-encode");
                 var originalPath = outputPath;
                 var clipEnd = hasCompression ? 90 : 98;
                 outputPath = await RunStageAsync(
@@ -334,12 +353,12 @@ public sealed class DownloadViewModel : ObservableObject
                     TryDeleteIntermediateFile(originalPath, outputPath);
                 }
 
-                item.Progress = Math.Max(item.Progress, clipEnd);
+                await RunOnUiAsync(() => item.Progress = Math.Max(item.Progress, clipEnd));
             }
 
             if (hasCompression)
             {
-                item.StatusText = "Compressing to target size";
+                await RunOnUiAsync(() => item.StatusText = "Compressing to target size");
                 var duration = item.ClipRange.IsEnabled ? item.ClipRange.LengthSeconds : item.Metadata?.DurationSeconds;
                 var compressStart = hasClip ? 90 : downloadEnd;
                 var compressionInputPath = outputPath;
@@ -354,7 +373,7 @@ public sealed class DownloadViewModel : ObservableObject
                         progress,
                         cancellationToken),
                     cancellationToken);
-                item.Progress = Math.Max(item.Progress, 98);
+                await RunOnUiAsync(() => item.Progress = Math.Max(item.Progress, 98));
             }
 
             return outputPath;
@@ -384,7 +403,7 @@ public sealed class DownloadViewModel : ObservableObject
         }
 
         released = true;
-        StartReadyDownloads();
+        StartQueueWork();
     }
 
     private void Cancel(DownloadItem? item)
@@ -550,6 +569,12 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void RaiseQueueState()
     {
+        if (!_dispatcherQueue.HasThreadAccess)
+        {
+            _dispatcherQueue.TryEnqueue(RaiseQueueState);
+            return;
+        }
+
         OnPropertyChanged(nameof(ActiveCount));
         OnPropertyChanged(nameof(QueuedCount));
         OnPropertyChanged(nameof(IsBusy));
@@ -580,17 +605,20 @@ public sealed class DownloadViewModel : ObservableObject
     {
         return new Progress<DownloadProgress>(update =>
         {
-            if (double.IsFinite(update.Percent))
+            RunOnUi(() =>
             {
-                var percent = Math.Clamp(update.Percent, 0, 100);
-                var mapped = start + ((end - start) * percent / 100);
-                item.Progress = Math.Max(item.Progress, mapped);
-            }
+                if (double.IsFinite(update.Percent))
+                {
+                    var percent = Math.Clamp(update.Percent, 0, 100);
+                    var mapped = start + ((end - start) * percent / 100);
+                    item.Progress = Math.Max(item.Progress, mapped);
+                }
 
-            item.Speed = update.Speed;
-            item.Eta = update.Eta;
-            item.CurrentStage = update.Stage ?? item.CurrentStage;
-            item.StatusText = FriendlyProgress(update.Message);
+                item.Speed = update.Speed;
+                item.Eta = update.Eta;
+                item.CurrentStage = update.Stage ?? item.CurrentStage;
+                item.StatusText = FriendlyProgress(update.Message);
+            });
         });
     }
 
@@ -627,26 +655,61 @@ public sealed class DownloadViewModel : ObservableObject
 
     private void MarkCancelled(DownloadItem item)
     {
+        RunOnUi(() =>
+        {
+            ApplyCancelled(item);
+            AddHistory(item, DownloadStatus.Cancelled);
+        });
+    }
+
+    private Task MarkCancelledAsync(DownloadItem item) =>
+        RunOnUiAsync(() =>
+        {
+            ApplyCancelled(item);
+            AddHistory(item, DownloadStatus.Cancelled);
+        });
+
+    private static void ApplyCancelled(DownloadItem item)
+    {
         item.IsCancelled = true;
         item.Status = DownloadStatus.Cancelled;
         item.CurrentStage = "Cancelled";
         item.StatusText = "Cancelled";
         item.CompletedAt = DateTimeOffset.Now;
-        AddHistory(item, DownloadStatus.Cancelled);
     }
 
     private void MarkFailed(DownloadItem item, string message, string statusText)
+    {
+        RunOnUi(() =>
+        {
+            ApplyFailed(item, message, statusText);
+            AddHistory(item, DownloadStatus.Failed);
+        });
+    }
+
+    private Task MarkFailedAsync(DownloadItem item, string message, string statusText) =>
+        RunOnUiAsync(() =>
+        {
+            ApplyFailed(item, message, statusText);
+            AddHistory(item, DownloadStatus.Failed);
+        });
+
+    private static void ApplyFailed(DownloadItem item, string message, string statusText)
     {
         item.Status = DownloadStatus.Failed;
         item.ErrorMessage = message;
         item.CurrentStage = "Failed";
         item.StatusText = statusText;
         item.CompletedAt = DateTimeOffset.Now;
-        AddHistory(item, DownloadStatus.Failed);
     }
 
     private void AddHistory(DownloadItem item, DownloadStatus status)
     {
+        if (_settings.DisableHistory)
+        {
+            return;
+        }
+
         if (item.CompletedAt is null)
         {
             item.CompletedAt = DateTimeOffset.Now;
@@ -654,11 +717,11 @@ public sealed class DownloadViewModel : ObservableObject
 
         var historyEntry = new DownloadHistoryEntry(
             item.Title,
-            item.Url,
+            _settings.StoreOnlyHistoryTitles ? "" : item.Url,
             item.Platform,
-            item.Format,
-            item.Resolution,
-            item.OutputFilePath ?? "",
+            _settings.StoreOnlyHistoryTitles ? "" : item.Format,
+            _settings.StoreOnlyHistoryTitles ? "" : item.Resolution,
+            _settings.StoreOnlyHistoryTitles ? "" : (item.OutputFilePath ?? ""),
             item.CompletedAt.Value,
             status);
         _history.Add(historyEntry);
@@ -686,6 +749,34 @@ public sealed class DownloadViewModel : ObservableObject
         {
             _dispatcherQueue.TryEnqueue(() => action());
         }
+    }
+
+    private Task RunOnUiAsync(Action action)
+    {
+        if (_dispatcherQueue.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    action();
+                    completion.SetResult();
+                }
+                catch (Exception ex)
+                {
+                    completion.SetException(ex);
+                }
+            }))
+        {
+            completion.SetException(new InvalidOperationException("UI dispatcher is not available."));
+        }
+
+        return completion.Task;
     }
 
     private static string FriendlyProgress(string message)

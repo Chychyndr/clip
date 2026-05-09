@@ -35,28 +35,28 @@ public static class UrlDetector
             return ClipPlatform.Unknown;
         }
 
-        var host = uri.Host.ToLowerInvariant();
-        if (host.Contains("youtube.com", StringComparison.Ordinal) || host.Contains("youtu.be", StringComparison.Ordinal))
+        var host = uri.Host.TrimEnd('.').ToLowerInvariant();
+        if (IsDomainOrSubdomain(host, "youtube.com") || IsDomainOrSubdomain(host, "youtu.be"))
         {
             return ClipPlatform.YouTube;
         }
 
-        if (host.Contains("twitter.com", StringComparison.Ordinal) || host.Contains("x.com", StringComparison.Ordinal))
+        if (IsDomainOrSubdomain(host, "twitter.com") || IsDomainOrSubdomain(host, "x.com"))
         {
             return ClipPlatform.Twitter;
         }
 
-        if (host.Contains("instagram.com", StringComparison.Ordinal))
+        if (IsDomainOrSubdomain(host, "instagram.com"))
         {
             return ClipPlatform.Instagram;
         }
 
-        if (host.Contains("tiktok.com", StringComparison.Ordinal))
+        if (IsDomainOrSubdomain(host, "tiktok.com"))
         {
             return ClipPlatform.TikTok;
         }
 
-        if (host.Contains("reddit.com", StringComparison.Ordinal))
+        if (IsDomainOrSubdomain(host, "reddit.com") || IsDomainOrSubdomain(host, "redd.it"))
         {
             return ClipPlatform.Reddit;
         }
@@ -79,5 +79,14 @@ public static class UrlDetector
         }
 
         return urls;
+    }
+
+    public static bool IsSupportedVideoUrl(string url) => DetectPlatform(url) is not ClipPlatform.Unknown;
+
+    private static bool IsDomainOrSubdomain(string host, string domain)
+    {
+        domain = domain.ToLowerInvariant();
+        return host.Equals(domain, StringComparison.Ordinal) ||
+               host.EndsWith("." + domain, StringComparison.Ordinal);
     }
 }

@@ -24,6 +24,7 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
     private readonly MetadataCacheService _metadataCacheService;
     private readonly ToolResolver _toolResolver;
     private readonly YtDlpUpdateService _ytDlpUpdateService;
+    private readonly IUiDispatcher _uiDispatcher;
     private CancellationTokenSource? _autoAnalyzeDelay;
     private string _url = "";
     private string _statusMessage = "Ready";
@@ -47,7 +48,8 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         IAppPathService pathService,
         MetadataCacheService metadataCacheService,
         ToolResolver toolResolver,
-        YtDlpUpdateService ytDlpUpdateService)
+        YtDlpUpdateService ytDlpUpdateService,
+        IUiDispatcher? uiDispatcher = null)
     {
         _queueService = queueService;
         _historyStore = historyStore;
@@ -60,6 +62,7 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         _metadataCacheService = metadataCacheService;
         _toolResolver = toolResolver;
         _ytDlpUpdateService = ytDlpUpdateService;
+        _uiDispatcher = uiDispatcher ?? ImmediateUiDispatcher.Instance;
         _saveDirectory = pathService.DefaultDownloadsDirectory;
 
         AnalyzeCommand = new AsyncRelayCommand(AnalyzeCurrentUrlAsync, () => UrlDetector.TryNormalize(Url, out _));
@@ -238,7 +241,7 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         var item = Downloads.FirstOrDefault(download => string.Equals(download.Url, normalized, StringComparison.OrdinalIgnoreCase))
             ?? _queueService.Enqueue(normalized, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource);
         item.BrowserCookieSource = CurrentCookieSource;
-        _ = Task.Run(() => _queueService.DownloadAsync(item));
+        _ = _queueService.DownloadAsync(item);
         StatusMessage = "Download queued.";
         await Task.CompletedTask;
     }
@@ -255,12 +258,18 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         {
             var lines = await File.ReadAllLinesAsync(path);
             var urls = UrlDetector.ExtractDistinctUrls(lines);
+            var imported = new List<DownloadItem>();
             foreach (var url in urls)
             {
-                _queueService.Enqueue(url, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource);
+                imported.Add(_queueService.Enqueue(url, SaveDirectory, SelectedMediaMode, SelectedFormat, SelectedResolution, CurrentCookieSource));
             }
 
-            StatusMessage = $"Imported {urls.Count} URL(s).";
+            foreach (var item in imported)
+            {
+                _ = _queueService.DownloadAsync(item);
+            }
+
+            StatusMessage = $"Imported and queued {urls.Count} URL(s).";
         }
         catch (Exception ex)
         {
@@ -285,9 +294,11 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
             ? NoCookieSource
             : Settings.BrowserCookieSource;
         await _settingsStore.SaveAsync();
-        _queueService.ApplySettings();
+        var settingsApplied = _queueService.ApplySettings();
         _clipboardMonitor.IsEnabled = Settings.MonitorClipboard;
-        StatusMessage = "Settings saved.";
+        StatusMessage = settingsApplied
+            ? "Settings saved."
+            : "Settings saved. New queue limits will apply after current tasks finish.";
     }
 
     private void ClearMetadataCache()
@@ -344,7 +355,9 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
 
     private void ScheduleAutoAnalyze()
     {
-        if (!Settings.AutoAnalyzeClipboard || !UrlDetector.TryNormalize(Url, out _))
+        if (!Settings.AutoAnalyzeClipboard ||
+            !UrlDetector.TryNormalize(Url, out var normalized) ||
+            !UrlDetector.IsSupportedVideoUrl(normalized))
         {
             return;
         }
@@ -352,17 +365,23 @@ public sealed class AppViewModel : ObservableEntity, IDisposable
         _autoAnalyzeDelay?.Cancel();
         _autoAnalyzeDelay = new CancellationTokenSource();
         var token = _autoAnalyzeDelay.Token;
-        _ = Task.Run(async () =>
+        _ = AutoAnalyzeAfterDelayAsync(token);
+    }
+
+    private async Task AutoAnalyzeAfterDelayAsync(CancellationToken token)
+    {
+        try
         {
-            try
-            {
-                await Task.Delay(600, token);
-                await AnalyzeCommand.ExecuteAsync();
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        }, token);
+            await Task.Delay(600, token);
+            await _uiDispatcher.InvokeAsync(() => AnalyzeCommand.ExecuteAsync());
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            await _uiDispatcher.InvokeAsync(() => StatusMessage = ex.Message);
+        }
     }
 
     private void OnSupportedUrlDetected(object? sender, string url)

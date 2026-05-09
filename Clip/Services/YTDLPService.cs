@@ -12,6 +12,8 @@ namespace Clip.Services;
 
 public sealed partial class YTDLPService
 {
+    private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MetadataTimeout = TimeSpan.FromMinutes(2);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -66,6 +68,20 @@ public sealed partial class YTDLPService
         return paths;
     }
 
+    public IReadOnlyList<string> GetToolWarnings(bool includeFfmpeg)
+    {
+        var warnings = new List<string>();
+        AddPathFallbackWarning(warnings, _toolResolver.Resolve(ExternalTool.YtDlp));
+
+        if (includeFfmpeg)
+        {
+            AddPathFallbackWarning(warnings, _toolResolver.Resolve(ExternalTool.Ffmpeg));
+            AddPathFallbackWarning(warnings, _toolResolver.Resolve(ExternalTool.Ffprobe));
+        }
+
+        return warnings;
+    }
+
     public async Task<VideoMetadata> AnalyzeAsync(string url, CancellationToken cancellationToken)
     {
         var missing = GetMissingBinaries(includeFfmpeg: false);
@@ -76,14 +92,18 @@ public sealed partial class YTDLPService
 
         var ytDlpPath = ResolveRequiredTool(ExternalTool.YtDlp);
         var ytDlpVersion = await ReadYtDlpVersionAsync(ytDlpPath, cancellationToken);
-        var cacheTtl = TimeSpan.FromHours(_settingsProvider.Current.MetadataCacheTtlHours);
+        var settings = _settingsProvider.Current;
+        var cacheTtl = TimeSpan.FromHours(settings.MetadataCacheTtlHours);
         const string analysisOptionsKey = "dump-single-json|no-playlist|no-warnings";
-        var cached = await _metadataCache.TryReadAsync(url, ytDlpVersion, analysisOptionsKey, cacheTtl, cancellationToken);
-        if (cached.Hit && cached.MetadataJson is not null)
+        if (settings.EnableMetadataCache)
         {
-            var cachedMetadata = DeserializeMetadata(cached.MetadataJson, url);
-            cachedMetadata.IsFromCache = true;
-            return cachedMetadata;
+            var cached = await _metadataCache.TryReadAsync(url, ytDlpVersion, analysisOptionsKey, cacheTtl, cancellationToken);
+            if (cached.Hit && cached.MetadataJson is not null)
+            {
+                var cachedMetadata = DeserializeMetadata(cached.MetadataJson, url);
+                cachedMetadata.IsFromCache = true;
+                return cachedMetadata;
+            }
         }
 
         var platform = URLDetector.DetectPlatform(url);
@@ -101,7 +121,7 @@ public sealed partial class YTDLPService
         var firstAttempt = await RunAnalyzeAttemptAsync(args, resolvedUrl, platform, browser: null, cancellationToken);
         if (firstAttempt.Result.IsSuccess)
         {
-            await _metadataCache.SaveAsync(url, ytDlpVersion, analysisOptionsKey, firstAttempt.StandardOutput, cancellationToken);
+            await SaveMetadataCacheAsync(url, ytDlpVersion, analysisOptionsKey, firstAttempt.StandardOutput, cancellationToken);
             return DeserializeMetadata(firstAttempt.StandardOutput, url);
         }
 
@@ -113,7 +133,7 @@ public sealed partial class YTDLPService
                 var retry = await RunAnalyzeAttemptAsync(args, resolvedUrl, platform, browser, cancellationToken);
                 if (retry.Result.IsSuccess)
                 {
-                    await _metadataCache.SaveAsync(url, ytDlpVersion, analysisOptionsKey, retry.StandardOutput, cancellationToken);
+                    await SaveMetadataCacheAsync(url, ytDlpVersion, analysisOptionsKey, retry.StandardOutput, cancellationToken);
                     return DeserializeMetadata(retry.StandardOutput, url);
                 }
 
@@ -199,7 +219,8 @@ public sealed partial class YTDLPService
             args,
             standardOutput: line => stdout.AppendLine(line),
             standardError: line => stderr.AppendLine(line),
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken,
+            timeout: MetadataTimeout);
 
         return new YtDlpAttemptResult(result, stdout.ToString(), stderr.ToString(), []);
     }
@@ -277,6 +298,29 @@ public sealed partial class YTDLPService
         return metadata;
     }
 
+    private async Task SaveMetadataCacheAsync(
+        string url,
+        string ytDlpVersion,
+        string analysisOptionsKey,
+        string metadataJson,
+        CancellationToken cancellationToken)
+    {
+        var settings = _settingsProvider.Current;
+        if (!settings.EnableMetadataCache)
+        {
+            return;
+        }
+
+        var maxBytes = settings.MaxMetadataCacheFileKilobytes * 1024L;
+        if (Encoding.UTF8.GetByteCount(metadataJson) > maxBytes)
+        {
+            return;
+        }
+
+        await _metadataCache.PruneAsync(TimeSpan.FromHours(settings.MetadataCacheTtlHours), maxBytes, cancellationToken);
+        await _metadataCache.SaveAsync(url, ytDlpVersion, analysisOptionsKey, metadataJson, cancellationToken);
+    }
+
     private string ResolveRequiredTool(ExternalTool tool)
     {
         var resolved = _toolResolver.Resolve(tool);
@@ -304,6 +348,14 @@ public sealed partial class YTDLPService
         return null;
     }
 
+    private static void AddPathFallbackWarning(List<string> warnings, ExternalToolResolution resolved)
+    {
+        if (resolved is { IsFound: true, IsFromPath: true, Path: not null })
+        {
+            warnings.Add($"Warning: {resolved.DisplayName} is being used from external PATH: {resolved.Path}");
+        }
+    }
+
     private async Task<string> ReadYtDlpVersionAsync(string ytDlpPath, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(_ytDlpVersion))
@@ -313,7 +365,11 @@ public sealed partial class YTDLPService
 
         try
         {
-            var result = await _processRunner.RunAsync(ytDlpPath, ["--version"], cancellationToken: cancellationToken);
+            var result = await _processRunner.RunAsync(
+                ytDlpPath,
+                ["--version"],
+                cancellationToken: cancellationToken,
+                timeout: VersionTimeout);
             _ytDlpVersion = result.IsSuccess && !string.IsNullOrWhiteSpace(result.StandardOutput)
                 ? result.StandardOutput.Trim()
                 : "unknown";

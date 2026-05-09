@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Clip.Services;
 
 namespace Clip.ViewModels;
 
@@ -18,7 +19,17 @@ public sealed class AsyncRelayCommand : ICommand
 
     public bool CanExecute(object? parameter) => !_isExecuting && (_canExecute?.Invoke() ?? true);
 
-    public async void Execute(object? parameter) => await ExecuteAsync();
+    public async void Execute(object? parameter)
+    {
+        try
+        {
+            await ExecuteAsync();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Error(ex, "Command execution failed");
+        }
+    }
 
     public async Task ExecuteAsync()
     {
@@ -63,8 +74,17 @@ public sealed class AsyncRelayCommand<T> : ICommand
         return !_isExecuting && (_canExecute?.Invoke(typed) ?? true);
     }
 
-    public async void Execute(object? parameter) =>
-        await ExecuteAsync(parameter is T value ? value : default);
+    public async void Execute(object? parameter)
+    {
+        try
+        {
+            await ExecuteAsync(parameter is T value ? value : default);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Error(ex, "Command execution failed");
+        }
+    }
 
     public async Task ExecuteAsync(T? parameter)
     {

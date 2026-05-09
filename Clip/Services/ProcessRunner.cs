@@ -6,13 +6,23 @@ namespace Clip.Services;
 
 public sealed class ProcessRunner : IExternalProcessRunner
 {
+    private const int MaxBufferedLogBytes = 512 * 1024;
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(30);
+    private readonly bool _allowPathFallback;
+
+    public ProcessRunner(bool allowPathFallback = false)
+    {
+        _allowPathFallback = allowPathFallback;
+    }
+
     public async Task<ProcessResult> RunAsync(
         string fileName,
         IEnumerable<string> arguments,
         string? workingDirectory = null,
         Action<string>? standardOutput = null,
         Action<string>? standardError = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        TimeSpan? timeout = null)
     {
         if (!File.Exists(fileName))
         {
@@ -38,10 +48,12 @@ public sealed class ProcessRunner : IExternalProcessRunner
             startInfo.ArgumentList.Add(argument);
         }
 
-        startInfo.Environment["PATH"] = BuildPath(startInfo.Environment.TryGetValue("PATH", out var currentPath) ? currentPath ?? "" : "");
+        startInfo.Environment["PATH"] = BuildPath(
+            startInfo.Environment.TryGetValue("PATH", out var currentPath) ? currentPath ?? "" : "",
+            _allowPathFallback);
 
-        var output = new StringBuilder();
-        var error = new StringBuilder();
+        var output = new BoundedLogBuffer(MaxBufferedLogBytes);
+        var error = new BoundedLogBuffer(MaxBufferedLogBytes);
 
         using var process = new Process
         {
@@ -79,14 +91,21 @@ public sealed class ProcessRunner : IExternalProcessRunner
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        using var timeoutCts = new CancellationTokenSource(timeout ?? DefaultTimeout);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
         try
         {
-            await process.WaitForExitAsync(cancellationToken);
+            await process.WaitForExitAsync(linkedCts.Token);
             process.WaitForExit();
         }
         catch (OperationCanceledException)
         {
             KillProcessTree(process);
+            if (!cancellationToken.IsCancellationRequested && timeoutCts.IsCancellationRequested)
+            {
+                throw new TimeoutException($"{Path.GetFileName(fileName)} timed out.");
+            }
+
             throw;
         }
 
@@ -105,19 +124,23 @@ public sealed class ProcessRunner : IExternalProcessRunner
         string? workingDirectory,
         Action<string>? standardOutput,
         Action<string>? standardError,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? timeout)
     {
-        var result = await RunAsync(fileName, arguments, workingDirectory, standardOutput, standardError, cancellationToken);
+        var result = await RunAsync(fileName, arguments, workingDirectory, standardOutput, standardError, cancellationToken, timeout);
         return new ExternalProcessResult(result.ExitCode, result.StandardOutput, result.StandardError);
     }
 
-    private static string BuildPath(string currentPath)
+    private static string BuildPath(string currentPath, bool allowPathFallback)
     {
         var entries = new List<string> { ClipConstants.BinDirectory, ClipConstants.LegacyBinDirectory };
-        entries.AddRange(ClipConstants.ExtraProbePaths);
-        if (!string.IsNullOrWhiteSpace(currentPath))
+        if (allowPathFallback)
         {
-            entries.Add(currentPath);
+            entries.AddRange(ClipConstants.ExtraProbePaths);
+            if (!string.IsNullOrWhiteSpace(currentPath))
+            {
+                entries.Add(currentPath);
+            }
         }
 
         return string.Join(Path.PathSeparator, entries.Where(entry => !string.IsNullOrWhiteSpace(entry)));
@@ -177,5 +200,36 @@ public sealed class ProcessRunner : IExternalProcessRunner
         {
             // The process may already be gone; cancellation should stay quiet.
         }
+    }
+
+    private sealed class BoundedLogBuffer
+    {
+        private readonly int _maxBytes;
+        private readonly StringBuilder _builder = new();
+        private int _bytes;
+
+        public BoundedLogBuffer(int maxBytes)
+        {
+            _maxBytes = maxBytes;
+        }
+
+        public void AppendLine(string line)
+        {
+            var text = line + Environment.NewLine;
+            _builder.Append(text);
+            _bytes += Encoding.UTF8.GetByteCount(text);
+            while (_bytes > _maxBytes && _builder.Length > 0)
+            {
+                var newline = _builder.ToString().IndexOf(Environment.NewLine, StringComparison.Ordinal);
+                var removeLength = newline < 0
+                    ? Math.Min(_builder.Length, _builder.Length / 2 + 1)
+                    : newline + Environment.NewLine.Length;
+                var removed = _builder.ToString(0, removeLength);
+                _builder.Remove(0, removeLength);
+                _bytes -= Encoding.UTF8.GetByteCount(removed);
+            }
+        }
+
+        public override string ToString() => _builder.ToString();
     }
 }
