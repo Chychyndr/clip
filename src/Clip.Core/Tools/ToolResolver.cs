@@ -5,18 +5,22 @@ public sealed class ToolResolver
     private readonly string _appBaseDirectory;
     private readonly HostPlatform _platform;
     private readonly string _environmentPath;
+    private readonly bool _allowPathFallback;
 
     public ToolResolver(
         string? appBaseDirectory = null,
         HostPlatform? platform = null,
-        string? environmentPath = null)
+        string? environmentPath = null,
+        bool allowPathFallback = false)
     {
         _appBaseDirectory = appBaseDirectory ?? AppContext.BaseDirectory;
         _platform = platform ?? HostPlatformDetector.Detect();
         _environmentPath = environmentPath ?? Environment.GetEnvironmentVariable("PATH") ?? "";
+        _allowPathFallback = allowPathFallback;
     }
 
     public HostPlatform Platform => _platform;
+    public bool AllowPathFallback => _allowPathFallback;
 
     public static string GetRuntimeFolder() => HostPlatformDetector.Detect().ResourceFolderName;
 
@@ -46,11 +50,24 @@ public sealed class ToolResolver
                 message: null);
         }
 
+        if (!_allowPathFallback)
+        {
+            return ExternalToolResolution.Missing(
+                tool,
+                displayName,
+                $"{displayName} was not found in bundled tools. PATH fallback is disabled.");
+        }
+
         foreach (var candidate in GetPathCandidates(tool))
         {
             if (File.Exists(candidate))
             {
-                return ExternalToolResolution.Found(tool, displayName, candidate, isFromPath: true);
+                return ExternalToolResolution.Found(
+                    tool,
+                    displayName,
+                    candidate,
+                    isFromPath: true,
+                    message: $"{displayName} is being used from PATH: {candidate}");
             }
         }
 
@@ -91,7 +108,6 @@ public sealed class ToolResolver
         }
 
         candidates.Add(Path.Combine(_appBaseDirectory, "Resources", "bin", fileName));
-        candidates.Add(Path.Combine(_appBaseDirectory, fileName));
         return candidates;
     }
 

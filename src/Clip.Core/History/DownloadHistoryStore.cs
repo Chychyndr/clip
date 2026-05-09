@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using Clip.Core.App;
+using Clip.Core.Files;
 using Clip.Core.Models;
 
 namespace Clip.Core.History;
@@ -53,13 +54,20 @@ public sealed class DownloadHistoryStore
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
         Items.Clear();
-        await SaveAsync(cancellationToken);
+        await AtomicFileWriter.DeleteIfExistsAsync(_historyPath, cancellationToken);
     }
 
     public async Task SaveAsync(CancellationToken cancellationToken = default)
     {
+        await SaveSnapshotAsync(Items.ToList(), cancellationToken);
+    }
+
+    public async Task SaveSnapshotAsync(
+        IReadOnlyList<DownloadHistoryEntry> entries,
+        CancellationToken cancellationToken = default)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(_historyPath) ?? ClipPaths.AppDataDirectory);
-        await using var stream = File.Create(_historyPath);
-        await JsonSerializer.SerializeAsync(stream, Items, JsonOptions, cancellationToken);
+        var json = JsonSerializer.Serialize(entries, JsonOptions);
+        await AtomicFileWriter.WriteAllTextAsync(_historyPath, json, cancellationToken);
     }
 }

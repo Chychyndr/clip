@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -18,10 +21,16 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore .\Clip.sln --configfile NuGet.Config -p:Platform=x64
+        run: dotnet restore .\Clip.sln --configfile NuGet.Config --locked-mode -p:Platform=x64
+
+      - name: Check vulnerable packages
+        run: dotnet list .\Clip.sln package --vulnerable --include-transitive
 
       - name: Build
         run: dotnet build .\Clip.sln --no-restore -c Release -p:Platform=x64
+
+      - name: Run tests
+        run: dotnet run --no-restore --project .\Clip.Tests\Clip.Tests.csproj -c Release
 
       - name: Publish
         shell: pwsh

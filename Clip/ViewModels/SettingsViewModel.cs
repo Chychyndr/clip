@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Clip.Core.App;
+using Clip.Core.Files;
 
 namespace Clip.ViewModels;
 
@@ -11,12 +12,16 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
     private bool _hideToTrayOnClose = true;
     private bool _startMinimized;
     private bool _checkForYtDlpUpdates = true;
+    private bool _allowPathFallback;
     private bool _keepOriginalWhenClipping;
+    private bool _disableHistory;
+    private bool _storeOnlyHistoryTitles;
+    private bool _enableMetadataCache = true;
+    private int _maxMetadataCacheFileKilobytes = 1024;
     private int _maxConcurrentDownloads = 2;
     private int _maxConcurrentMetadataAnalysis = 3;
     private int _ytDlpConcurrentFragments = 4;
     private bool _useAria2c;
-    private bool _fastBatchTextImport;
     private TrimMode _trimMode = TrimMode.Fast;
     private CompressionMode _compressionMode = CompressionMode.Balance;
     private VideoEncoderChoice _videoEncoder = VideoEncoderChoice.Auto;
@@ -103,12 +108,72 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
         }
     }
 
+    public bool AllowPathFallback
+    {
+        get => _allowPathFallback;
+        set
+        {
+            if (SetProperty(ref _allowPathFallback, value))
+            {
+                Save();
+            }
+        }
+    }
+
     public bool KeepOriginalWhenClipping
     {
         get => _keepOriginalWhenClipping;
         set
         {
             if (SetProperty(ref _keepOriginalWhenClipping, value))
+            {
+                Save();
+            }
+        }
+    }
+
+    public bool DisableHistory
+    {
+        get => _disableHistory;
+        set
+        {
+            if (SetProperty(ref _disableHistory, value))
+            {
+                Save();
+            }
+        }
+    }
+
+    public bool StoreOnlyHistoryTitles
+    {
+        get => _storeOnlyHistoryTitles;
+        set
+        {
+            if (SetProperty(ref _storeOnlyHistoryTitles, value))
+            {
+                Save();
+            }
+        }
+    }
+
+    public bool EnableMetadataCache
+    {
+        get => _enableMetadataCache;
+        set
+        {
+            if (SetProperty(ref _enableMetadataCache, value))
+            {
+                Save();
+            }
+        }
+    }
+
+    public int MaxMetadataCacheFileKilobytes
+    {
+        get => _maxMetadataCacheFileKilobytes;
+        set
+        {
+            if (SetProperty(ref _maxMetadataCacheFileKilobytes, Math.Clamp(value, 64, 8192)))
             {
                 Save();
             }
@@ -159,18 +224,6 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
         set
         {
             if (SetProperty(ref _useAria2c, value))
-            {
-                Save();
-            }
-        }
-    }
-
-    public bool FastBatchTextImport
-    {
-        get => _fastBatchTextImport;
-        set
-        {
-            if (SetProperty(ref _fastBatchTextImport, value))
             {
                 Save();
             }
@@ -244,12 +297,16 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
                     settings.HideToTrayOnClose = loaded.HideToTrayOnClose;
                     settings.StartMinimized = loaded.StartMinimized;
                     settings.CheckForYtDlpUpdates = loaded.CheckForYtDlpUpdates;
+                    settings.AllowPathFallback = loaded.AllowPathFallback;
                     settings.KeepOriginalWhenClipping = loaded.KeepOriginalWhenClipping;
+                    settings.DisableHistory = loaded.DisableHistory;
+                    settings.StoreOnlyHistoryTitles = loaded.StoreOnlyHistoryTitles;
+                    settings.EnableMetadataCache = loaded.EnableMetadataCache;
+                    settings.MaxMetadataCacheFileKilobytes = loaded.MaxMetadataCacheFileKilobytes;
                     settings.MaxConcurrentDownloads = loaded.MaxConcurrentDownloads;
                     settings.MaxConcurrentMetadataAnalysis = loaded.MaxConcurrentMetadataAnalysis;
                     settings.YtDlpConcurrentFragments = loaded.YtDlpConcurrentFragments;
                     settings.UseAria2c = loaded.UseAria2c;
-                    settings.FastBatchTextImport = loaded.FastBatchTextImport;
                     settings.TrimMode = loaded.TrimMode;
                     settings.CompressionMode = loaded.CompressionMode;
                     settings.VideoEncoder = loaded.VideoEncoder;
@@ -278,7 +335,7 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
 
         Directory.CreateDirectory(ClipConstants.AppDataDirectory);
         var snapshot = CreateSnapshot();
-        File.WriteAllText(ClipConstants.SettingsPath, JsonSerializer.Serialize(snapshot, JsonOptions));
+        AtomicFileWriter.WriteAllText(ClipConstants.SettingsPath, JsonSerializer.Serialize(snapshot, JsonOptions));
     }
 
     private AppSettings CreateSnapshot()
@@ -290,13 +347,17 @@ public sealed class SettingsViewModel : ObservableObject, IAppSettingsProvider
             HideToTrayOnClose = HideToTrayOnClose,
             StartMinimized = StartMinimized,
             CheckForYtDlpUpdates = CheckForYtDlpUpdates,
+            AllowPathFallback = AllowPathFallback,
             KeepOriginalWhenClipping = KeepOriginalWhenClipping,
+            DisableHistory = DisableHistory,
+            StoreOnlyHistoryTitles = StoreOnlyHistoryTitles,
+            EnableMetadataCache = EnableMetadataCache,
+            MaxMetadataCacheFileKilobytes = MaxMetadataCacheFileKilobytes,
             MaxConcurrentDownloads = MaxConcurrentDownloads,
             MaxConcurrentMetadataAnalysis = MaxConcurrentMetadataAnalysis,
             MaxConcurrentFfmpegJobs = MaxConcurrentFfmpegJobs,
             YtDlpConcurrentFragments = YtDlpConcurrentFragments,
             UseAria2c = UseAria2c,
-            FastBatchTextImport = FastBatchTextImport,
             TrimMode = TrimMode,
             CompressionMode = CompressionMode,
             VideoEncoder = VideoEncoder,

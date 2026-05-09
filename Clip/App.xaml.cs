@@ -58,13 +58,15 @@ public partial class App : Application
             }
 
             var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-            var processRunner = new ProcessRunner();
-            var toolResolver = new ToolResolver(ClipConstants.AppBaseDirectory);
+            var settings = SettingsViewModel.Load();
+            var processRunner = new ProcessRunner(settings.AllowPathFallback);
+            var toolResolver = new ToolResolver(
+                ClipConstants.AppBaseDirectory,
+                allowPathFallback: settings.AllowPathFallback);
             var metadataCache = new MetadataCacheService(ClipConstants.MetadataCacheDirectory);
             var redditResolver = new RedditResolver();
             var fileDialogService = new FileDialogService();
             var outputPathHolder = new OutputPathHolder();
-            var settings = SettingsViewModel.Load();
             var encoderDetector = new FfmpegEncoderDetector(processRunner, toolResolver);
             var ytDlpService = new YTDLPService(processRunner, redditResolver, toolResolver, metadataCache, settings);
             var ffmpegService = new Services.FFmpegService(processRunner, toolResolver, settings, encoderDetector);

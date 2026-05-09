@@ -80,7 +80,7 @@ public static partial class URLDetector
             return Platform.Unknown;
         }
 
-        var host = uri.Host.ToLowerInvariant();
+        var host = uri.Host.TrimEnd('.').ToLowerInvariant();
         if (IsHost(host, "youtube.com") || IsHost(host, "youtu.be"))
         {
             return Platform.YouTube;

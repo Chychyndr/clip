@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Clip.Core.App;
+using Clip.Core.Files;
 
 namespace Clip.Core.Settings;
 
@@ -25,7 +26,7 @@ public sealed class SettingsStore : IAppSettingsProvider
         Current.Normalize();
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath) ?? ClipPaths.AppDataDirectory);
         var json = JsonSerializer.Serialize(Current, JsonOptions);
-        await File.WriteAllTextAsync(_settingsPath, json, cancellationToken);
+        await AtomicFileWriter.WriteAllTextAsync(_settingsPath, json, cancellationToken);
     }
 
     public async Task ReloadAsync(CancellationToken cancellationToken = default)

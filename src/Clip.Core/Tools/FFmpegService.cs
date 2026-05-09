@@ -82,11 +82,6 @@ public sealed class FFmpegService
             throw new FileNotFoundException($"{resolved.DisplayName} was not found.", resolved.DisplayName);
         }
 
-        if (!string.IsNullOrWhiteSpace(resolved.Message))
-        {
-            throw new InvalidOperationException(resolved.Message);
-        }
-
         return resolved;
     }
 

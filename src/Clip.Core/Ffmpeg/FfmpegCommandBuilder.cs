@@ -9,9 +9,9 @@ public static class FfmpegCommandBuilder
     [
         "-y",
         "-ss",
-        FormatTime(options.StartSeconds),
+        FormatSeconds(options.StartSeconds),
         "-to",
-        FormatTime(options.EndSeconds),
+        FormatSeconds(options.EndSeconds),
         "-i",
         options.InputPath,
         "-map",
@@ -29,9 +29,9 @@ public static class FfmpegCommandBuilder
         {
             "-y",
             "-ss",
-            FormatTime(options.StartSeconds),
+            FormatSeconds(options.StartSeconds),
             "-to",
-            FormatTime(options.EndSeconds),
+            FormatSeconds(options.EndSeconds),
             "-i",
             options.InputPath,
             "-map",
@@ -143,8 +143,10 @@ public static class FfmpegCommandBuilder
         codec.Equals("libx264", StringComparison.OrdinalIgnoreCase) ||
         codec.Equals("libx265", StringComparison.OrdinalIgnoreCase);
 
-    public static string FormatTime(double seconds) =>
-        TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"hh\:mm\:ss\.fff", CultureInfo.InvariantCulture);
+    public static string FormatTime(double seconds) => FormatSeconds(seconds);
+
+    public static string FormatSeconds(double seconds) =>
+        Math.Max(0, seconds).ToString("0.###", CultureInfo.InvariantCulture);
 }
 
 public sealed class FfmpegTrimOptions

@@ -28,6 +28,10 @@
                               OffContent="Off"
                               OnContent="On"
                               IsOn="{Binding Settings.CheckForYtDlpUpdates, Mode=TwoWay}" />
+                <ToggleSwitch Header="Allow external tools from PATH (restart required)"
+                              OffContent="Bundled only"
+                              OnContent="Allow PATH"
+                              IsOn="{Binding Settings.AllowPathFallback, Mode=TwoWay}" />
             </StackPanel>
 
             <StackPanel Spacing="10">
@@ -64,12 +68,6 @@
                                   OffContent="Off"
                                   OnContent="On"
                                   IsOn="{Binding Settings.UseAria2c, Mode=TwoWay}" />
-                    <ToggleSwitch Grid.Row="2"
-                                  Grid.Column="1"
-                                  Header="Fast TXT batch import"
-                                  OffContent="Off"
-                                  OnContent="On"
-                                  IsOn="{Binding Settings.FastBatchTextImport, Mode=TwoWay}" />
                 </Grid>
             </StackPanel>
 
@@ -126,6 +124,45 @@
                             Grid.ColumnSpan="2"
                             Content="Clear metadata cache"
                             Command="{Binding ClearMetadataCacheCommand}" />
+                </Grid>
+                <TextBlock Text="PATH fallback is off by default for release builds. When enabled, Check buttons show the resolved executable path."
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+
+            <StackPanel Spacing="10">
+                <TextBlock Text="Privacy" FontWeight="SemiBold" />
+                <Grid ColumnSpacing="8" RowSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <ToggleSwitch Header="History"
+                                  OffContent="Disabled"
+                                  OnContent="Enabled"
+                                  IsOn="{Binding Settings.DisableHistory, Mode=TwoWay, Converter={StaticResource InverseBooleanConverter}}" />
+                    <ToggleSwitch Grid.Column="1"
+                                  Header="Store only history titles"
+                                  OffContent="Full"
+                                  OnContent="Titles only"
+                                  IsOn="{Binding Settings.StoreOnlyHistoryTitles, Mode=TwoWay}" />
+                    <ToggleSwitch Grid.Row="1"
+                                  Header="Metadata cache"
+                                  OffContent="Off"
+                                  OnContent="On"
+                                  IsOn="{Binding Settings.EnableMetadataCache, Mode=TwoWay}" />
+                    <NumberBox Grid.Row="1"
+                               Grid.Column="1"
+                               Header="Max cache file KB"
+                               Minimum="64"
+                               Maximum="8192"
+                               SmallChange="64"
+                               LargeChange="512"
+                               Value="{Binding Settings.MaxMetadataCacheFileKilobytes, Mode=TwoWay}" />
                 </Grid>
             </StackPanel>
         </StackPanel>

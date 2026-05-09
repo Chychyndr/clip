@@ -1,8 +1,13 @@
+using System.Net;
+using System.Security;
+using System.Security.Cryptography;
+using System.Text;
 using Clip.Core.Cache;
 using Clip.Core.App;
 using Clip.Core.Files;
 using Clip.Core.Ffmpeg;
 using Clip.Core.Queue;
+using Clip.Core.Services;
 using Clip.Core.Tools;
 using Clip.Core.YtDlp;
 
@@ -12,9 +17,11 @@ var tests = new (string Name, Func<Task> Test)[]
     ("YtDlpProgressParser parses stable progress and ignores unknown lines", TestProgressParser),
     ("FilenameSanitizer cleans invalid names and preserves extensions", TestFilenameSanitizer),
     ("QueueService respects download and ffmpeg concurrency and cancellation", TestQueueServiceAsync),
-    ("ToolResolver selects platform binaries and falls back to PATH", TestToolResolver),
+    ("ToolResolver selects platform binaries and requires opt-in for PATH", TestToolResolver),
+    ("YtDlpReleaseSecurity verifies trusted release checksums", TestYtDlpReleaseSecurityAsync),
     ("YtDlpCommandBuilder uses explicit aria2c path and cookies", TestYtDlpCommandBuilder),
-    ("FfmpegCommandBuilder uses stream copy for fast trim", TestFfmpegFastTrim),
+    ("FfmpegCommandBuilder uses stream copy and seconds for fast trim", TestFfmpegFastTrim),
+    ("UrlDetector matches real domains only", TestUrlDetector),
     ("AppSettings normalizes concurrency and cookies", TestAppSettingsNormalize)
 };
 
@@ -58,6 +65,15 @@ static async Task TestMetadataCacheAsync()
     clock.Advance(TimeSpan.FromHours(25));
     var expired = await cache.TryReadAsync(url, "2026.01.01", "default", TimeSpan.FromHours(24));
     Assert(expired.IsExpired, "Cache should expire after TTL.");
+
+    var stalePath = Path.Combine(directory, "stale.json");
+    await File.WriteAllTextAsync(stalePath, "{}");
+    File.SetLastWriteTimeUtc(stalePath, clock.GetUtcNow().UtcDateTime.AddDays(-2));
+    var largePath = Path.Combine(directory, "large.json");
+    await File.WriteAllTextAsync(largePath, new string('x', 128));
+    await cache.PruneAsync(TimeSpan.FromHours(24), maxFileBytes: 64);
+    Assert(!File.Exists(stalePath), "Expected stale metadata cache file to be pruned.");
+    Assert(!File.Exists(largePath), "Expected oversized metadata cache file to be pruned.");
 }
 
 static Task TestProgressParser()
@@ -111,6 +127,19 @@ static async Task TestQueueServiceAsync()
     await Task.WhenAll(ffmpegJobs);
     Assert(maxFfmpeg == 1, "ffmpeg jobs should be serialized.");
 
+    var parallelFfmpegQueue = new QueueService(maxConcurrentDownloads: 1, maxConcurrentAnalysis: 1, maxConcurrentFfmpegJobs: 2);
+    currentFfmpeg = 0;
+    maxFfmpeg = 0;
+    var parallelFfmpegJobs = Enumerable.Range(0, 4).Select(_ => parallelFfmpegQueue.RunFfmpegAsync(async token =>
+    {
+        var current = Interlocked.Increment(ref currentFfmpeg);
+        maxFfmpeg = Math.Max(maxFfmpeg, current);
+        await Task.Delay(20, token);
+        Interlocked.Decrement(ref currentFfmpeg);
+    }, CancellationToken.None));
+    await Task.WhenAll(parallelFfmpegJobs);
+    Assert(maxFfmpeg == 2, "ffmpeg limit should use the configured value.");
+
     var job = new QueueJob();
     var running = QueueService.RunCancellableJobAsync(job, async (_, token) =>
     {
@@ -136,10 +165,64 @@ static Task TestToolResolver()
     var pathDirectory = CreateTempDirectory();
     var pathTool = Path.Combine(pathDirectory, "ffprobe.exe");
     File.WriteAllText(pathTool, "");
-    var pathResolver = new ToolResolver(CreateTempDirectory(), new HostPlatform(HostOperatingSystem.Windows, HostArchitecture.X64), pathDirectory);
+    var disabledPathResolver = new ToolResolver(CreateTempDirectory(), new HostPlatform(HostOperatingSystem.Windows, HostArchitecture.X64), pathDirectory);
+    var disabledPathResolved = disabledPathResolver.Resolve(ExternalTool.Ffprobe, ensureExecutable: false);
+    Assert(!disabledPathResolved.IsFound, "PATH fallback should be disabled by default.");
+
+    var appDirectory = CreateTempDirectory();
+    File.WriteAllText(Path.Combine(appDirectory, "ffmpeg.exe"), "");
+    var appDirectoryResolver = new ToolResolver(appDirectory, new HostPlatform(HostOperatingSystem.Windows, HostArchitecture.X64), "");
+    var appDirectoryResolved = appDirectoryResolver.Resolve(ExternalTool.Ffmpeg, ensureExecutable: false);
+    Assert(!appDirectoryResolved.IsFound, "Executables next to the app should not bypass bundled tool folders.");
+
+    var pathResolver = new ToolResolver(
+        CreateTempDirectory(),
+        new HostPlatform(HostOperatingSystem.Windows, HostArchitecture.X64),
+        pathDirectory,
+        allowPathFallback: true);
     var pathResolved = pathResolver.Resolve(ExternalTool.Ffprobe, ensureExecutable: false);
     Assert(pathResolved.IsFound && pathResolved.IsFromPath && pathResolved.Path == pathTool, "Expected PATH fallback.");
     return Task.CompletedTask;
+}
+
+static async Task TestYtDlpReleaseSecurityAsync()
+{
+    const string assetUrl = "https://github.com/yt-dlp/yt-dlp/releases/download/2026.01.01/yt-dlp.exe";
+    const string checksumUrl = "https://github.com/yt-dlp/yt-dlp/releases/download/2026.01.01/SHA2-256SUMS";
+    var assetBytes = Encoding.ASCII.GetBytes("fake executable");
+    var sha256 = Convert.ToHexString(SHA256.HashData(assetBytes)).ToLowerInvariant();
+    using var client = new HttpClient(new StaticHttpHandler(new Dictionary<string, byte[]>
+    {
+        [assetUrl] = assetBytes,
+        [checksumUrl] = Encoding.ASCII.GetBytes($"{sha256}  yt-dlp.exe{Environment.NewLine}")
+    }));
+
+    var verified = await YtDlpReleaseSecurity.DownloadVerifiedAssetAsync(
+        client,
+        "yt-dlp.exe",
+        assetUrl,
+        checksumUrl,
+        CancellationToken.None);
+    Assert(verified.SequenceEqual(assetBytes), "Expected verified release bytes.");
+
+    await AssertThrowsSecurityAsync(() => YtDlpReleaseSecurity.DownloadVerifiedAssetAsync(
+        client,
+        "yt-dlp.exe",
+        "https://example.com/yt-dlp.exe",
+        checksumUrl,
+        CancellationToken.None));
+
+    using var mismatchClient = new HttpClient(new StaticHttpHandler(new Dictionary<string, byte[]>
+    {
+        [assetUrl] = assetBytes,
+        [checksumUrl] = Encoding.ASCII.GetBytes($"{new string('0', 64)}  yt-dlp.exe{Environment.NewLine}")
+    }));
+    await AssertThrowsSecurityAsync(() => YtDlpReleaseSecurity.DownloadVerifiedAssetAsync(
+        mismatchClient,
+        "yt-dlp.exe",
+        assetUrl,
+        checksumUrl,
+        CancellationToken.None));
 }
 
 static Task TestYtDlpCommandBuilder()
@@ -161,6 +244,14 @@ static Task TestYtDlpCommandBuilder()
     Assert(args.Contains("4"), "Expected fragment count.");
     Assert(HasAdjacent(args, "--downloader", "C:\\Tools\\aria2c.exe"), "Expected bundled aria2c path to be passed.");
     Assert(HasAdjacent(args, "--cookies-from-browser", "chrome"), "Expected browser cookie source.");
+
+    var batchArgs = YtDlpCommandBuilder.BuildBatchDownload(new YtDlpBatchDownloadOptions
+    {
+        BatchFilePath = "links.txt",
+        SaveDirectory = "C:\\Downloads",
+        BrowserCookieSource = "edge"
+    }).ToArray();
+    Assert(HasAdjacent(batchArgs, "--cookies-from-browser", "edge"), "Expected batch downloads to keep browser cookies.");
     return Task.CompletedTask;
 }
 
@@ -170,12 +261,22 @@ static Task TestFfmpegFastTrim()
     {
         InputPath = "input file.mp4",
         OutputPath = "output file.mp4",
-        StartSeconds = 1.5,
-        EndSeconds = 3.25
+        StartSeconds = 90000.5,
+        EndSeconds = 90003.25
     }).ToArray();
 
     Assert(HasAdjacent(args, "-c", "copy"), "Fast trim should use stream copy.");
     Assert(!args.Contains("-preset"), "Fast trim should not re-encode.");
+    Assert(HasAdjacent(args, "-ss", "90000.5"), "Long-video trim start should be passed as seconds.");
+    return Task.CompletedTask;
+}
+
+static Task TestUrlDetector()
+{
+    Assert(UrlDetector.DetectPlatform("https://youtube.com/watch?v=1") == Clip.Core.Models.Platform.YouTube, "Expected youtube.com.");
+    Assert(UrlDetector.DetectPlatform("https://m.youtube.com/watch?v=1") == Clip.Core.Models.Platform.YouTube, "Expected youtube subdomain.");
+    Assert(UrlDetector.DetectPlatform("https://youtube.com.evil.example/watch?v=1") == Clip.Core.Models.Platform.Unknown, "Expected fake YouTube host to be unknown.");
+    Assert(UrlDetector.DetectPlatform("https://notinstagram.com/reel/1") == Clip.Core.Models.Platform.Unknown, "Expected fake Instagram host to be unknown.");
     return Task.CompletedTask;
 }
 
@@ -228,6 +329,20 @@ static bool HasAdjacent(IReadOnlyList<string> values, string left, string right)
     return false;
 }
 
+static async Task AssertThrowsSecurityAsync(Func<Task> action)
+{
+    try
+    {
+        await action();
+    }
+    catch (SecurityException)
+    {
+        return;
+    }
+
+    throw new InvalidOperationException("Expected a security exception.");
+}
+
 sealed class ManualTimeProvider : TimeProvider
 {
     private DateTimeOffset _now;
@@ -240,4 +355,28 @@ sealed class ManualTimeProvider : TimeProvider
     public override DateTimeOffset GetUtcNow() => _now;
 
     public void Advance(TimeSpan value) => _now += value;
+}
+
+sealed class StaticHttpHandler : HttpMessageHandler
+{
+    private readonly IReadOnlyDictionary<string, byte[]> _responses;
+
+    public StaticHttpHandler(IReadOnlyDictionary<string, byte[]> responses)
+    {
+        _responses = responses;
+    }
+
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        if (request.RequestUri is not null &&
+            _responses.TryGetValue(request.RequestUri.AbsoluteUri, out var bytes))
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent(bytes)
+            });
+        }
+
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+    }
 }

@@ -70,6 +70,7 @@ public static class YtDlpCommandBuilder
             ConcurrentFragments = options.ConcurrentFragments,
             UseAria2c = options.UseAria2c,
             Aria2cPath = options.Aria2cPath,
+            BrowserCookieSource = options.BrowserCookieSource,
             OutputTemplate = options.OutputTemplate
         };
 
@@ -188,5 +189,6 @@ public sealed class YtDlpBatchDownloadOptions
     public int ConcurrentFragments { get; init; } = 4;
     public bool UseAria2c { get; init; }
     public string? Aria2cPath { get; init; }
+    public string? BrowserCookieSource { get; init; }
     public string OutputTemplate { get; init; } = "%(title).200B [%(id)s].%(ext)s";
 }

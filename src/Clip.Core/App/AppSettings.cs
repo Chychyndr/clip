@@ -7,13 +7,17 @@ public sealed class AppSettings
     public bool HideToTrayOnClose { get; set; } = true;
     public bool StartMinimized { get; set; }
     public bool CheckForYtDlpUpdates { get; set; } = true;
+    public bool AllowPathFallback { get; set; }
     public bool KeepOriginalWhenClipping { get; set; }
+    public bool DisableHistory { get; set; }
+    public bool StoreOnlyHistoryTitles { get; set; }
+    public bool EnableMetadataCache { get; set; } = true;
+    public int MaxMetadataCacheFileKilobytes { get; set; } = 1024;
     public int MaxConcurrentDownloads { get; set; } = 2;
     public int MaxConcurrentMetadataAnalysis { get; set; } = 3;
     public int MaxConcurrentFfmpegJobs { get; set; } = 1;
     public int YtDlpConcurrentFragments { get; set; } = 4;
     public bool UseAria2c { get; set; }
-    public bool FastBatchTextImport { get; set; }
     public string? BrowserCookieSource { get; set; }
     public TrimMode TrimMode { get; set; } = TrimMode.Fast;
     public CompressionMode CompressionMode { get; set; } = CompressionMode.Balance;
@@ -27,6 +31,7 @@ public sealed class AppSettings
         MaxConcurrentFfmpegJobs = 1;
         YtDlpConcurrentFragments = ClampToAllowed(YtDlpConcurrentFragments, [1, 4, 8], 4);
         MetadataCacheTtlHours = Math.Clamp(MetadataCacheTtlHours, 1, 24 * 30);
+        MaxMetadataCacheFileKilobytes = Math.Clamp(MaxMetadataCacheFileKilobytes, 64, 8192);
         var cookieSource = BrowserCookieSource?.Trim();
         BrowserCookieSource = string.IsNullOrWhiteSpace(cookieSource) ||
                               cookieSource.Equals("None", StringComparison.OrdinalIgnoreCase)

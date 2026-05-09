@@ -10,7 +10,8 @@ public sealed class QueueService
     {
         _downloadLimiter = new SemaphoreSlim(Math.Max(1, maxConcurrentDownloads), Math.Max(1, maxConcurrentDownloads));
         _analysisLimiter = new SemaphoreSlim(Math.Max(1, maxConcurrentAnalysis), Math.Max(1, maxConcurrentAnalysis));
-        _ffmpegLimiter = new SemaphoreSlim(1, 1);
+        var ffmpegLimit = Math.Max(1, maxConcurrentFfmpegJobs);
+        _ffmpegLimiter = new SemaphoreSlim(ffmpegLimit, ffmpegLimit);
     }
 
     public async Task AnalyzeAsync(Func<CancellationToken, Task> action, CancellationToken cancellationToken)

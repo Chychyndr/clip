@@ -276,9 +276,20 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        var toolWarnings = _ytDlpService.GetToolWarnings(includeFfmpeg: true);
+        if (toolWarnings.Count > 0)
+        {
+            UpdateMessage = string.Join(Environment.NewLine, toolWarnings);
+        }
+
         if (Settings.CheckForYtDlpUpdates)
         {
-            UpdateMessage = await _updateService.CheckForYtDlpUpdateAsync(_shutdown.Token);
+            var updateMessage = await _updateService.CheckForYtDlpUpdateAsync(_shutdown.Token);
+            UpdateMessage = string.IsNullOrWhiteSpace(updateMessage)
+                ? UpdateMessage
+                : string.IsNullOrWhiteSpace(UpdateMessage)
+                    ? updateMessage
+                    : $"{UpdateMessage}{Environment.NewLine}{updateMessage}";
         }
     }
 
@@ -414,7 +425,7 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task CheckYtDlpAsync()
     {
-        UpdateMessage = await _updateService.CheckForYtDlpUpdateAsync(_shutdown.Token)
+        UpdateMessage = await _updateService.CheckForYtDlpUpdateAsync(_shutdown.Token, includeUpToDateStatus: true)
             ?? "yt-dlp is present and up to date.";
     }
 
@@ -436,9 +447,10 @@ public sealed class MainViewModel : ObservableObject
         {
             var detection = await _ffmpegService.DetectEncodersAsync(_shutdown.Token);
             var encoder = detection.RecommendedEncoder.ToString();
+            var toolStatus = _ffmpegService.GetToolStatus();
             UpdateMessage = string.IsNullOrWhiteSpace(detection.Warning)
-                ? $"ffmpeg is present. Recommended encoder: {encoder}."
-                : detection.Warning;
+                ? $"ffmpeg is present. Recommended encoder: {encoder}.{Environment.NewLine}{toolStatus}"
+                : $"{detection.Warning}{Environment.NewLine}{toolStatus}";
         }
         catch (Exception ex)
         {
@@ -563,12 +575,6 @@ public sealed class MainViewModel : ObservableObject
         {
             Feedback = "No supported links found.";
             return;
-        }
-
-        if (Settings.FastBatchTextImport && links.Count > 1)
-        {
-            // TODO: Route same-settings imports through YtDlpCommandBuilder.BuildBatchDownload once the UI has a batch item surface.
-            CrashLog.Info("Fast TXT batch import requested; queueing individual items until batch queue UI is available.");
         }
 
         foreach (var link in links)

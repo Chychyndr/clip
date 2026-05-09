@@ -19,10 +19,13 @@ Clip is a Windows-only WinUI 3 desktop app for downloading video and audio from 
 - [Supported Services](#supported-services)
 - [Tray Menu](#tray-menu)
 - [TXT Import](#txt-import)
+- [Tool Security](#tool-security)
 - [Build](#build)
 - [Portable Build](#portable-build)
 - [Installer](#installer)
 - [Code Signing](#code-signing)
+- [License](#license)
+- [Third-Party Binaries](#third-party-binaries)
 - [Troubleshooting](#troubleshooting)
 - [Local Data](#local-data)
 
@@ -41,7 +44,7 @@ Clip is a Windows-only WinUI 3 desktop app for downloading video and audio from 
 | Target size | Keep the original size or compress to a custom megabyte target. |
 | Clip range | Download the full media or save a selected trim range. |
 | Processing options | Fast or exact trim, compression mode, hardware encoder preference, and concurrent `yt-dlp` fragments. |
-| Tool updates | Check and update `yt-dlp` from the app. |
+| Tool updates | Check and update bundled `yt-dlp` from the app with SHA-256 verification. |
 
 ## Supported Services
 
@@ -53,7 +56,7 @@ Clip is a Windows-only WinUI 3 desktop app for downloading video and audio from 
 | TikTok | Public links usually work through `yt-dlp`. |
 | Reddit | Links are resolved through `api.reddit.com`. |
 
-Unsupported services are ignored by clipboard monitoring, TXT import, and drag and drop.
+Unsupported services are ignored by clipboard monitoring, TXT import, and drag and drop. Manual downloads still depend on `yt-dlp` support, but automatic clipboard analysis is limited to the services above.
 
 ## Tray Menu
 
@@ -70,7 +73,22 @@ https://x.com/user/status/123; https://www.instagram.com/reel/example/
 https://youtu.be/example3: https://reddit.com/r/videos/comments/example
 ```
 
-Duplicate links are queued once.
+Duplicate links are queued once. Imported links are added to the normal queue immediately, so they are analyzed and downloaded with the same progress, cancellation, retry, history, and privacy behavior as pasted links. Low-level `yt-dlp -a links.txt` command support exists in the core command builder for a future dedicated batch job UI.
+
+## Tool Security
+
+Release builds use bundled tools only by default:
+
+```text
+Resources\bin\win-x64\yt-dlp.exe
+Resources\bin\win-x64\ffmpeg.exe
+Resources\bin\win-x64\ffprobe.exe
+Resources\bin\win-x64\aria2c.exe
+```
+
+`PATH` fallback is disabled unless the user explicitly enables `Allow external tools from PATH` in Settings and restarts the app. When external tools are enabled, the Check buttons show the full executable path and mark it as an external `PATH` executable.
+
+The built-in `yt-dlp` updater only downloads assets from `https://github.com/yt-dlp/yt-dlp/releases/download/`, downloads the release checksum file, verifies SHA-256, then starts the downloaded executable with `--version` before replacing the bundled binary. Failed updates remove the `.download` file and keep a `.bak` backup for rollback.
 
 ## Build
 
@@ -91,7 +109,7 @@ resources\bin\win-x64\ffprobe.exe
 Build commands:
 
 ```powershell
-dotnet restore .\Clip.sln -p:Platform=x64
+dotnet restore .\Clip.sln --configfile NuGet.Config -p:Platform=x64
 dotnet build .\Clip.sln -c Debug -p:Platform=x64
 ```
 
@@ -104,7 +122,14 @@ dotnet run --project .\Clip\Clip.csproj -p:Platform=x64
 Run tests:
 
 ```powershell
-dotnet run --project .\Clip.Tests\Clip.Tests.csproj
+dotnet run --project .\Clip.Tests\Clip.Tests.csproj -c Release
+```
+
+Security checks:
+
+```powershell
+dotnet list .\Clip.sln package --vulnerable --include-transitive
+dotnet list .\Clip.sln package --deprecated
 ```
 
 ## Portable Build
@@ -199,11 +224,23 @@ signtool verify /pa /v .\artifacts\ClipSetup.exe
 
 `signtool.exe` is included with the Windows SDK and is available from Visual Studio Developer PowerShell. Keep certificates, `.pfx` files, and passwords out of git.
 
+## License
+
+Clip is distributed under GPL-3.0-only. New source files should include this SPDX header:
+
+```csharp
+// SPDX-License-Identifier: GPL-3.0-only
+```
+
+## Third-Party Binaries
+
+The repository keeps placeholder folders under `resources/bin/*` and does not commit third-party binaries. Before publishing a release that bundles `yt-dlp`, `ffmpeg`, `ffprobe`, or `aria2c`, update [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with exact versions, binary providers, checksums, licenses, and FFmpeg build configuration.
+
 ## Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| `Missing required binary` | Check `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` in `resources\bin\win-x64`. |
+| `Missing required binary` | Check `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` in `resources\bin\win-x64`. Public builds do not use `PATH` unless the setting is enabled. |
 | `Sign in to confirm you're not a bot` | Sign in to YouTube in Chrome, Edge, Firefox, or Brave, then retry. |
 | `Could not copy Chrome cookie database` | Close Chrome and retry. Clip can also try Edge, Firefox, or Brave if available. |
 | `Clip could not locate the output file` | Update `yt-dlp.exe`, check the output folder, and verify write permissions. |
@@ -216,6 +253,8 @@ signtool verify /pa /v .\artifacts\ClipSetup.exe
 Downloads: %USERPROFILE%\Downloads\Clip
 History:   %LOCALAPPDATA%\Clip\history.json
 Settings:  %LOCALAPPDATA%\Clip\settings.json
-Log:       %LOCALAPPDATA%\Clip\crash.log
-Cache:     %LOCALAPPDATA%\Clip\metadata-cache
+Log:       %LOCALAPPDATA%\Clip\logs\clip.log
+Cache:     %LOCALAPPDATA%\Clip\cache\metadata
 ```
+
+History can be disabled in Settings. `Store only history titles` keeps titles but omits saved URLs, formats, resolutions, and local output paths. Metadata cache can also be disabled or cleared from Settings; oversized and expired cache files are pruned automatically before new metadata is saved.

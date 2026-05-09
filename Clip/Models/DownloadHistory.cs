@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using Clip.Core.Files;
 
 namespace Clip.Models;
 
@@ -46,14 +47,14 @@ public sealed class DownloadHistory
     public void Clear()
     {
         Items.Clear();
-        Save(ClipConstants.HistoryPath);
+        AtomicFileWriter.DeleteIfExists(ClipConstants.HistoryPath);
     }
 
     public void Save(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ClipConstants.AppDataDirectory);
         var json = JsonSerializer.Serialize(Items, JsonOptions);
-        File.WriteAllText(path, json);
+        AtomicFileWriter.WriteAllText(path, json);
     }
 }
 
